@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI客服</title>
+  <link rel="stylesheet" href="/brand-theme.css">
+  <link rel="stylesheet" href="/panel/panel.css">
+</head>
+<body>
+  <div id="app" class="app">
+    <!-- 顶栏：logo + 公司/私人 + 拖拽空白 + 菜单/隐藏（不要重复写产品名文字） -->
+    <header class="bar" id="dragBar">
+      <span class="brand"><img class="brand-logo" src="/brand-logo-64.png" alt="" draggable="false">AI客服</span>
+      <div class="seg" role="tablist" id="scopeSeg">
+        <button role="tab" data-scope="company" class="on">公司</button>
+        <button role="tab" data-scope="private">私人</button>
+      </div>
+      <span class="grow"></span>
+      <button class="icon-btn" id="menuBtn" title="菜单">
+        <svg viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="12.5" cy="8" r="1.3"/></svg>
+      </button>
+      <button class="icon-btn" id="hideBtn" title="隐藏面板">
+        <svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </header>
+
+    <!-- 搜索 -->
+    <div class="search">
+      <svg class="search-ico" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6" stroke-width="1.6" fill="none"/><path d="M10.5 10.5L14 14" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <input id="q" type="text" placeholder="搜索话术（支持拼音、首字母）" autocomplete="off" spellcheck="false">
+      <button class="clear" id="clearQ" title="清空" hidden>×</button>
+      <button class="star-filter" id="favFilter" title="只看常用（收藏 + 最近常发）">★</button>
+    </div>
+
+    <!-- 状态行：窗口状态（文字） + 问 AI -->
+    <div class="status">
+      <button class="target" id="targetBtn" title="点击管理目标聊天窗">
+        <i class="dot" id="targetDot"></i><span id="targetText">未连接聊天窗</span>
+      </button>
+      <button class="ask" id="askBtn" title="先复制买家消息，再点这里生成建议回复">问 AI</button>
+    </div>
+
+    <!-- 问 AI 卡片 -->
+    <section class="ai" id="ai" hidden></section>
+
+    <!-- 话术列表（主角） -->
+    <main class="list" id="list" tabindex="-1"></main>
+
+    <div class="toast" id="toast" hidden></div>
+    <div class="pop" id="pop" hidden></div>
+  </div>
+  <script src="/panel/vendor/pinyin-pro.js"></script>
+  <script src="/panel/panel.js"></script>
+</body>
+</html>

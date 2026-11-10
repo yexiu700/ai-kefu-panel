@@ -1,0 +1,66 @@
+{
+  "name": "ai-kefu-panel",
+  "version": "0.2.27",
+  "description": "AI客服（原版前端 + Electron 壳）",
+  "main": "electron/main.js",
+  "productName": "AI客服",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "start:panel": "electron . -- --window=panel",
+    "start:manager": "electron . -- --window=manager",
+    "dist": "electron-builder --win nsis",
+    "test:unit": "node scripts/unit-feishu-sync.mjs"
+  },
+  "dependencies": {
+    "pinyin-pro": "^3.29.5",
+    "ws": "^8.22.1"
+  },
+  "build": {
+    "appId": "com.arzopa.aikefu",
+    "productName": "AI客服",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      ".api_key",
+      "electron/**/*",
+      "frontend/**/*",
+      "build/icon.ico",
+      "build/icon.png",
+      "package.json",
+      "!**/*.bak*",
+      "!**/*.pre-cleanup*",
+      "!**/claude-code*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "shortcutName": "AI客服",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "publish": null,
+    "asar": true,
+    "asarUnpack": [
+      "electron/win32-daemon.ps1"
+    ]
+  },
+  "devDependencies": {
+    "electron-builder": "^26.18.0",
+    "electron": "^34.3.0"
+  },
+  "author": "arzopa"
+}

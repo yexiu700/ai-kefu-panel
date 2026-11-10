@@ -1,0 +1,140 @@
+/* AI客服 · 品牌色 —— 取自 brand-logo.png：cyan #00CFD0 → royal blue #0035B3
+ * 主面板（panel.css）与管理窗（manager.html，<html class="mgr">）共用。
+ * 管理窗为编译产物，这里只用 CSS 变量 + 少量选择器覆盖，不改 JS。 */
+:root {
+  --brand-cyan: #00cfd0;
+  --brand-blue: #0035b3;
+  --brand: #0b5bd3;            /* 实色主色：文字/边框/焦点（白底对比度 ≥ 5:1） */
+  --brand-hover: #0047bd;
+  --brand-soft: #e7f3fc;
+  --brand-ring: rgba(11, 120, 211, .32);
+  --brand-grad: linear-gradient(120deg, #06b4cf 0%, #0a78d6 48%, #0035b3 100%);
+  --brand-grad-hover: linear-gradient(120deg, #04a6c4 0%, #086bcb 48%, #002ea3 100%);
+  --brand-grad-text: linear-gradient(120deg, #00a9c4 0%, #0035b3 100%);
+}
+:root[data-theme="dark"] {
+  --brand: #4da3ff;
+  --brand-hover: #74b8ff;
+  --brand-soft: #16283f;
+  --brand-ring: rgba(77, 163, 255, .38);
+  --brand-grad-text: linear-gradient(120deg, #2fd6e0 0%, #5b9bff 100%);
+}
+
+/* ———————— 管理窗 ———————— */
+html.mgr {
+  /* 中性冷白底，替换原暖米色，和主面板一致 */
+  --bg: #f7f9fc;
+  --bg-elev: #ffffff;
+  --bg-subtle: #eef2f7;
+  --bg-hover: rgba(16, 40, 80, .04);
+  --bg-active: rgba(16, 40, 80, .08);
+  --fg: #16181d;
+  --fg-muted: #4b515c;
+  --fg-faint: #6b717c;
+  --border: rgba(16, 40, 80, .09);
+  --border-strong: rgba(16, 40, 80, .15);
+  --scrim: rgba(16, 24, 40, .32);
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, .06), 0 0 0 1px rgba(16, 24, 40, .04);
+  --shadow-2: 0 18px 44px -10px rgba(16, 24, 40, .22), 0 2px 6px rgba(16, 24, 40, .06), 0 0 0 1px rgba(16, 24, 40, .05);
+  --scrollbar-thumb: rgba(16, 40, 80, .18);
+  --scrollbar-thumb-hover: rgba(16, 40, 80, .32);
+
+  --accent: var(--brand);
+  --accent-hover: var(--brand-hover);
+  --accent-soft: var(--brand-soft);
+  --accent-contrast: #ffffff;
+  --accent-ring: var(--brand-ring);
+}
+html.mgr[data-theme="dark"] {
+  --bg: #17191d;
+  --bg-elev: #1f2227;
+  --bg-subtle: #262a30;
+  --bg-hover: rgba(255, 255, 255, .05);
+  --bg-active: rgba(255, 255, 255, .09);
+  --fg: #eceef1;
+  --fg-muted: #b4b9c2;
+  --fg-faint: #8a909a;
+  --border: rgba(255, 255, 255, .08);
+  --border-strong: rgba(255, 255, 255, .15);
+  --scrim: rgba(0, 0, 0, .55);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .35), 0 0 0 1px rgba(255, 255, 255, .04);
+  --shadow-2: 0 20px 48px -10px rgba(0, 0, 0, .65), 0 0 0 1px rgba(255, 255, 255, .07);
+  --scrollbar-thumb: rgba(255, 255, 255, .2);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, .34);
+  --accent-contrast: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  html.mgr:not([data-theme="light"]) {
+    --brand: #4da3ff;
+    --brand-hover: #74b8ff;
+    --brand-soft: #16283f;
+    --brand-ring: rgba(77, 163, 255, .38);
+    --bg: #17191d;
+    --bg-elev: #1f2227;
+    --bg-subtle: #262a30;
+    --bg-hover: rgba(255, 255, 255, .05);
+    --bg-active: rgba(255, 255, 255, .09);
+    --fg: #eceef1;
+    --fg-muted: #b4b9c2;
+    --fg-faint: #8a909a;
+    --border: rgba(255, 255, 255, .08);
+    --border-strong: rgba(255, 255, 255, .15);
+    --scrim: rgba(0, 0, 0, .55);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, .35), 0 0 0 1px rgba(255, 255, 255, .04);
+    --shadow-2: 0 20px 48px -10px rgba(0, 0, 0, .65), 0 0 0 1px rgba(255, 255, 255, .07);
+    --scrollbar-thumb: rgba(255, 255, 255, .2);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, .34);
+    --accent-contrast: #ffffff;
+  }
+}
+
+/* 主按钮：青蓝渐变（--btn-base 未注册为 <color>，可直接放渐变） */
+html.mgr .btn--primary { --btn-base: var(--brand-grad); }
+html.mgr .btn--primary:hover:not(:disabled),
+html.mgr .btn--primary:active:not(:disabled) { --btn-base: var(--brand-grad-hover); }
+
+/* 选中态：分段 / 公司·私人切换 / 开关 */
+html.mgr .segmented__item--active,
+html.mgr .scope-switch__tab--active,
+html.mgr .scope-switch__tab--active:hover { background: var(--brand-grad) !important; }
+html.mgr .switch--on,
+html.mgr .switch--on:hover:not(.switch--disabled) { background: var(--brand-grad) !important; }
+
+/* 侧栏选中项：浅青底 + 左侧渐变条 */
+html.mgr .nav__item--active::before {
+  content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px;
+  border-radius: 0 2px 2px 0; background: var(--brand-grad);
+}
+html.mgr .nav__brand-text {
+  background: var(--brand-grad-text); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+
+/* 进度条 */
+html.mgr .meter__bar,
+html.mgr .update__bar span { background: var(--brand-grad) !important; }
+
+/* FORCE_BRAND_OVER_ACCENT */
+/* 设置里若选了非品牌强调色，仍强制侧栏/主按钮/焦点用青蓝品牌色 */
+html.mgr {
+  --accent: var(--brand) !important;
+  --accent-hover: var(--brand-hover) !important;
+  --accent-soft: var(--brand-soft) !important;
+  --accent-ring: var(--brand-ring) !important;
+}
+html.mgr .nav__item--active {
+  background: var(--brand-soft) !important;
+  color: var(--brand) !important;
+}
+html.mgr .nav__item--active::before {
+  background: var(--brand-grad) !important;
+}
+html.mgr a, html.mgr .link, html.mgr [data-link] { color: var(--brand); }
+html.mgr a:hover, html.mgr .link:hover { color: var(--brand-hover); }
+html.mgr :focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 3px var(--brand-ring) !important;
+}
+html.mgr input:focus, html.mgr textarea:focus, html.mgr select:focus {
+  border-color: var(--brand) !important;
+  box-shadow: 0 0 0 3px var(--brand-ring) !important;
+}

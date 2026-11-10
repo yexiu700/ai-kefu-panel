@@ -1,0 +1,29 @@
+# deps
+node_modules/
+
+# secrets — never commit
+.api_key
+.env
+.env.*
+feishu.env
+
+# logs & local run junk
+*.log
+claude-code-run*.log
+claude-code-pinyin.log
+*.broken-*
+
+# screenshots / temp helpers (not product)
+ai-kefu-*.png
+_*.py
+
+# backups
+*.bak*
+*.pre-cleanup-*
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+dist/

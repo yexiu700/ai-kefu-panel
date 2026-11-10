@@ -1,0 +1,7 @@
+AI客服（原版前端壳，demo，不打包）
+
+启动：
+  cd huiyou-original-shell
+  start.cmd
+
+或： npm start
