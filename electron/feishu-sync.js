@@ -259,7 +259,7 @@ function emptyResult(message, error) {
 }
 function validateConfig(cfg) {
     if (!cfg.appId || !cfg.appSecret) {
-        return '未配置飞书 App ID / App Secret：请在「导入 / 备份」页填写，或设置环境变量 HUIYOU_FEISHU_APP_ID / HUIYOU_FEISHU_APP_SECRET';
+        return '未配置飞书 App ID / App Secret：请在「设置 → 飞书同步配置」中导入 feishu.env；源码用户也可运行 scripts/import-feishu-config.cmd';
     }
     if (!cfg.baseToken || !cfg.tableId)
         return '未配置飞书 Base token / Table ID';

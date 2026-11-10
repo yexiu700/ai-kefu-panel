@@ -1,6 +1,6 @@
 {
   "name": "ai-kefu-panel",
-  "version": "0.2.27",
+  "version": "0.2.30",
   "description": "AI客服（原版前端 + Electron 壳）",
   "main": "electron/main.js",
   "productName": "AI客服",
@@ -10,7 +10,8 @@
     "start:panel": "electron . -- --window=panel",
     "start:manager": "electron . -- --window=manager",
     "dist": "electron-builder --win nsis",
-    "test:unit": "node scripts/unit-feishu-sync.mjs"
+    "test:unit": "node scripts/unit-feishu-sync.mjs",
+    "test:media": "node scripts/unit-media.cjs"
   },
   "dependencies": {
     "pinyin-pro": "^3.29.5",
@@ -23,7 +24,6 @@
       "output": "dist"
     },
     "files": [
-      ".api_key",
       "electron/**/*",
       "frontend/**/*",
       "build/icon.ico",
@@ -31,7 +31,11 @@
       "package.json",
       "!**/*.bak*",
       "!**/*.pre-cleanup*",
-      "!**/claude-code*"
+      "!**/claude-code*",
+      "!**/.env",
+      "!**/.env.*",
+      "!**/feishu.env",
+      "!**/.api_key"
     ],
     "win": {
       "target": [

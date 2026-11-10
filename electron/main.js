@@ -350,8 +350,15 @@ function registerMediaProtocol() {
   protocol.handle('huiyou-media', async (request) => {
     try {
       const u = new URL(request.url)
-      const p = u.searchParams.get('p')
-      if (!p || !fs.existsSync(p)) return new Response('not found', { status: 404 })
+      let p = u.searchParams.get('p')
+      if (!p) return new Response('not found', { status: 404 })
+      // 话术保存媒体文件名；同时兼容已有数据中的绝对路径。
+      if (!path.isAbsolute(p)) {
+        if (p !== path.basename(p)) return new Response('not found', { status: 404 })
+        p = [path.join(store.mediaDir(), p), path.join(store.stickersDir(), p)]
+          .find((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile())
+      }
+      if (!p || !fs.existsSync(p) || !fs.statSync(p).isFile()) return new Response('not found', { status: 404 })
       return net.fetch(pathToFileURL(p).href)
     } catch (e) {
       return new Response(String(e), { status: 500 })

@@ -3,11 +3,13 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { app, dialog, shell, clipboard, BrowserWindow, nativeImage } = require('electron')
 const store = require('./store')
-const { sendText } = require('./send')
+const media = require('./media')
+const { sendText, sendPhrase } = require('./send')
 const { getLogDir } = require('./send-log')
 const win32 = require('./win32')
 const assist = require('./assist')
 const feishu = require('./feishu-sync')
+const feishuConfig = require('./feishu-config')
 let feishuSyncPending = null
 
 /** @type {{ panelVisible: boolean, target: any, pinned: boolean, hotkeysSuspended: boolean, autostart: boolean, stubs: string[] }} */
@@ -72,6 +74,19 @@ async function handleCommand(cmd, args = {}, ctx) {
   args = args || {}
 
   switch (cmd) {
+    case 'get_feishu_config_status':
+      try { return { ok: true, ...feishuConfig.status() } }
+      catch (error) { return { ok: false, message: feishuConfig.publicError(error) } }
+    case 'import_feishu_config': {
+      try {
+        const selected = await dialog.showOpenDialog({
+          title: '导入飞书同步配置', properties: ['openFile'],
+          filters: [{ name: '配置文件', extensions: ['env', 'txt'] }, { name: '所有文件', extensions: ['*'] }],
+        })
+        if (selected.canceled || !selected.filePaths.length) return { ok: false, canceled: true }
+        return feishuConfig.importFile(selected.filePaths[0])
+      } catch (error) { return { ok: false, message: feishuConfig.publicError(error) } }
+    }
     case 'sync_company_from_feishu': {
       if (feishuSyncPending) return feishuSyncPending
       feishuSyncPending = (async () => {
@@ -155,7 +170,7 @@ async function handleCommand(cmd, args = {}, ctx) {
     case 'get_app_info':
       return {
         name: 'AI客服',
-        version: '0.2.18-shell',
+        version: require('../package.json').version,
         dataDir: store.getDataDir(),
         platform: process.platform,
       }
@@ -195,7 +210,7 @@ async function handleCommand(cmd, args = {}, ctx) {
       const mode = args.mode || settings.send?.mode || 'send'
       emitAll('send-state', { sending: true, phraseId: args.phraseId })
       try {
-        const result = await sendText(phrase.content || '', {
+        const result = await sendPhrase(phrase, {
           mode,
           key: settings.send?.key || 'enter',
           pasteDelayMs: settings.send?.pasteDelayMs ?? 80,
@@ -373,17 +388,18 @@ async function handleCommand(cmd, args = {}, ctx) {
             ? [{ name: 'Files', extensions: [].concat(args.extensions) }]
             : undefined),
       })
-      if (res.canceled) return []
-      return res.filePaths.map((p) => {
-        const dest = store.copyIntoMedia(p, isImages ? 'media' : 'media')
-        return { name: path.basename(dest), path: dest }
-      })
+      if (cmd === 'pick_file') {
+        if (res.canceled || !res.filePaths.length) return new Uint8Array()
+        const src = res.filePaths[0], name = Buffer.from(path.basename(src), 'utf8'), bytes = fs.readFileSync(src)
+        const header = Buffer.alloc(4); header.writeUInt32LE(name.length)
+        return new Uint8Array(Buffer.concat([header, name, bytes]))
+      }
+      return media.pickPaths(res.canceled ? [] : res.filePaths, isImages)
     }
 
     case 'import_image':
     case 'import_file': {
-      // args may include bytes via Tauri channel — soft stub if missing
-      return stub(cmd, null)
+      return media.saveBytes(args.bytes, { image: cmd === 'import_image', fileName: args.fileName })
     }
 
     case 'get_image_bytes':

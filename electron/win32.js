@@ -36,7 +36,7 @@ function ensureDaemon() {
     try {
       const c = spawn(
         'powershell.exe',
-        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT],
+        ['-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT],
         { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] },
       )
       child = c
@@ -170,7 +170,7 @@ async function activateWindow(hwnd) {
   }
 }
 
-async function sendKeys(hwnd, { mode = 'send', key = 'enter', delayMs = 80, prefix = '', exe = '' } = {}) {
+async function sendKeys(hwnd, { mode = 'send', key = 'enter', delayMs = 80, prefix = '', exe = '', media = false, focusInput = false, clipboardSequence = 0 } = {}) {
   if (!isWin()) return { ok: false, method: 'unsupported' }
   try {
     const res = await request({
@@ -181,7 +181,10 @@ async function sendKeys(hwnd, { mode = 'send', key = 'enter', delayMs = 80, pref
       delayMs,
       prefix,
       exe,
-    }, 15000)
+      media,
+      focusInput,
+      clipboardSequence,
+    }, Math.max(15000, Math.max(0, Math.min(10000, Number(delayMs) || 0)) * 2 + 8000))
     return { ...res, ok: !!res?.ok, method: res?.method || 'sendkeys', error: res?.error }
   } catch (e) {
     return { ok: false, method: 'sendkeys-failed', error: String(e) }
@@ -210,6 +213,7 @@ function dispose() {
 }
 
 module.exports = {
+  writeFileClipboard: paths => request({ op: 'clipboard-files', paths }, 15000),
   isWin,
   ensureDaemon,
   listOpenApps,

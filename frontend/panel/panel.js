@@ -234,7 +234,7 @@
     return `<div class="row${title ? '' : ' no-title'}${fq ? ' fq' : ''}${S.busyId === p.id ? ' busy' : ''}" data-i="${idx}" data-id="${esc(p.id)}">` +
       (title ? `<div class="t"><span${tcStyle}>${highlight(title, tokens)}</span>` +
         (showGroup && !fq ? `<span class="tag">${esc(g.name)}</span>` : '') +
-        (media ? `<span class="tag" title="附带图片/文件需在管理窗发送">+${media} 附件</span>` : '') + `</div>` : '') +
+        (media ? `<span class="tag" title="填入/发送时粘贴图片和附件，请核对目标窗口">+${media} 附件</span>` : '') + `</div>` : '') +
       `<div class="c" title="${esc(content)}">${highlight(snippet(content, tokens), tokens)}</div>` +
       `<div class="acts">` +
         `<button class="star${p.favorite ? ' on' : ''}" data-act="fav" title="${p.favorite ? '取消收藏' : '收藏'}">${p.favorite ? '★' : '☆'}</button>` +
@@ -344,7 +344,7 @@
 
   async function usePhrase(p, act) {
     if (!p || S.busyId) return
-    if (act === 'copy' || !hasTarget()) {
+    if (act === 'copy' || (!hasTarget() && !(p.images?.length || p.files?.length))) {
       await copyText(p.content || '')
       bumpUsage(p.id)
       toast(hasTarget() ? '已复制' : '已复制，请在聊天窗粘贴（未连接聊天窗）', hasTarget() ? '' : 'warn')
@@ -356,18 +356,18 @@
       const r = await invoke('send_phrase', { phraseId: p.id, mode: act })
       bumpUsage(p.id)
       if (r?.unbound || r?.mode === 'clipboard') {
-        await copyText(p.content || '')
+        if (!r?.hasMedia) await copyText(p.content || '')
         toast(r?.message || '已复制，请手动粘贴', 'warn')
       } else if (r && r.ok === false) {
-        await copyText(p.content || '')
+        if (!r?.hasMedia) await copyText(p.content || '')
         toast(sendFailureMessage(r), 'err')
       } else {
-        toast(r?.verify === 'match' ? (act === 'send' ? '已执行发送（粘贴已验证）' : '已填入，确认后回车发送') : (act === 'send' ? '已执行发送，粘贴未验证' : '已执行粘贴，未验证输入内容'), r?.verify === 'match' ? '' : 'warn')
+        toast(r?.message || (r?.verify === 'match' ? (act === 'send' ? '已执行发送（粘贴已验证）' : '已填入，确认后回车发送') : (act === 'send' ? '已执行发送，粘贴未验证' : '已执行粘贴，未验证输入内容')), r?.verify === 'match' ? '' : 'warn')
         ok = true
       }
     } catch (e) {
-      await copyText(p.content || '')
-      toast('发送失败，已复制：' + (e?.message || e), 'err')
+      if (!(p.images?.length || p.files?.length)) await copyText(p.content || '')
+      toast('发送失败：' + (e?.message || e), 'err')
     } finally {
       S.busyId = null; renderList()
     }

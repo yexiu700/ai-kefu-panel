@@ -16,6 +16,7 @@ public class HyWin {
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT r);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber();
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
   [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
@@ -162,7 +163,24 @@ function Test-PastedText([IntPtr]$h, [string]$prefix) {
   } catch { return 'unavailable' }
 }
 
-function Send-KeysTo([IntPtr]$h, $mode, $key, $delayMs, [string]$prefix, [string]$previousExe) {
+# Focus only a uniquely identified editable control. Never guess screen coordinates.
+function Focus-MediaInput([IntPtr]$h) {
+  try {
+    Add-Type -AssemblyName UIAutomationClient -ErrorAction Stop
+    Add-Type -AssemblyName UIAutomationTypes -ErrorAction Stop
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($h)
+    $focused = [System.Windows.Automation.AutomationElement]::FocusedElement
+    if ($focused -and $focused.Current.ProcessId -eq $root.Current.ProcessId -and $focused.Current.ControlType -eq [System.Windows.Automation.ControlType]::Edit -and -not $focused.Current.IsPassword -and $focused.Current.Name -notmatch '搜索|查找|search|find') { return $true }
+    $condition = New-Object System.Windows.Automation.PropertyCondition ([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit)
+    $edits = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
+    $candidates = @($edits | Where-Object { $_.Current.IsEnabled -and -not $_.Current.IsOffscreen -and -not $_.Current.IsPassword -and $_.Current.IsKeyboardFocusable -and $_.Current.Name -match '消息|输入|回复|message|input|reply' -and $_.Current.Name -notmatch '搜索|查找|search|find' })
+    if ($candidates.Count -ne 1) { return $false }
+    $candidates[0].SetFocus()
+    return $candidates[0].Equals([System.Windows.Automation.AutomationElement]::FocusedElement)
+  } catch { return $false }
+}
+
+function Send-KeysTo([IntPtr]$h, $mode, $key, $delayMs, [string]$prefix, [string]$previousExe, [bool]$media = $false, [bool]$focusInput = $false, [uint32]$clipboardSequence = 0) {
   $rebound = $false
   if (-not [HyWin]::IsWindow($h)) {
     $apps = @(List-OpenApps)
@@ -177,14 +195,28 @@ function Send-KeysTo([IntPtr]$h, $mode, $key, $delayMs, [string]$prefix, [string
   try {
   Start-Sleep -Milliseconds ([Math]::Max(40, [int]$delayMs))
   Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+  if (($media -or $focusInput) -and $r.exe -match '^(?i)(jdm_dd_workbench|pop_dd_workbench|jm_dd_workbench)\.exe$' -and -not (Focus-MediaInput $h)) {
+    $r.ok = $false; $r.error = 'input-focus-unavailable'; $r.message = '无法确认京东工作台输入框焦点，请先点击聊天输入框再重试，或手动粘贴剪贴板中的媒体'; return $r
+  }
+  $fg = [HyWin]::GetForegroundWindow()
+  if ($fg -ne $h -and -not [HyWin]::IsChild($h, $fg) -and [HyWin]::GetAncestor($h, 3) -ne $fg) {
+    $r.ok = $false; $r.error = 'foreground-changed'; $r.message = '前台窗口发生变化，已停止粘贴，请重新选择聊天窗'; return $r
+  }
+  if ($media -and $clipboardSequence -ne 0 -and [HyWin]::GetClipboardSequenceNumber() -ne $clipboardSequence) {
+    $r.ok = $false; $r.error = 'clipboard-changed'; $r.message = '剪贴板已被其他程序更改，已停止粘贴，请重试'; return $r
+  }
   [System.Windows.Forms.SendKeys]::SendWait('^v')
   # Verify before Enter can clear the input and before JS can restore the clipboard.
-  Start-Sleep -Milliseconds ([Math]::Max(200, [int]$delayMs))
-  $verify = Test-PastedText $h $prefix
+  Start-Sleep -Milliseconds ([Math]::Max($(if ($media) { 1500 } else { 200 }), [int]$delayMs))
+  $verify = if ($media) { 'unavailable' } else { Test-PastedText $h $prefix }
   if ($verify -eq 'mismatch') {
     $r.ok = $false; $r.sendKeysOk = $true; $r.verify = $verify; $r.error = 'Paste verification mismatch'; return $r
   }
   if ($mode -eq 'send') {
+    $fg = [HyWin]::GetForegroundWindow()
+    if ($fg -ne $h -and -not [HyWin]::IsChild($h, $fg) -and [HyWin]::GetAncestor($h, 3) -ne $fg) {
+      $r.ok = $false; $r.sendKeysOk = $true; $r.verify = $verify; $r.error = 'foreground-changed'; $r.message = '粘贴后前台窗口发生变化，已停止按发送键，请核对目标输入框'; return $r
+    }
     switch ($key) {
       'ctrl_enter' { [System.Windows.Forms.SendKeys]::SendWait('^{ENTER}') }
       'alt_s' { [System.Windows.Forms.SendKeys]::SendWait('%s') }
@@ -249,6 +281,24 @@ while ($true) {
     $op = [string]$req.op
     switch ($op) {
       'ping' { Write-Result @{ ok = $true; op = 'ping' } }
+      'clipboard-files' {
+        try {
+          Add-Type -AssemblyName System.Windows.Forms
+          $files = New-Object System.Collections.Specialized.StringCollection
+          foreach ($file in $req.paths) {
+            if (-not [System.IO.File]::Exists([string]$file)) { throw '文件不存在或无权访问，请重新添加媒体' }
+            [void]$files.Add([string]$file)
+          }
+          if ($files.Count -eq 0) { throw '没有可复制的媒体文件' }
+          $data = New-Object System.Windows.Forms.DataObject
+          $data.SetFileDropList($files)
+          # Persistent CF_HDROP data survives the helper and needs no temporary copies.
+          [System.Windows.Forms.Clipboard]::SetDataObject($data, $true, 5, 100)
+          $actual = [System.Windows.Forms.Clipboard]::GetFileDropList()
+          if ($actual.Count -ne $files.Count) { throw '文件剪贴板写入校验失败，请重试' }
+          Write-Result @{ ok = $true; count = $actual.Count; format = 'CF_HDROP'; clipboardSequence = [HyWin]::GetClipboardSequenceNumber() }
+        } catch { Write-Result @{ ok = $false; message = '无法复制媒体文件，请检查文件是否存在、访问权限和剪贴板占用'; error = 'file-clipboard-failed' } }
+      }
       'list' {
         $apps = @(List-OpenApps)
         Write-Result @{ ok = $true; apps = $apps }
@@ -270,7 +320,7 @@ while ($true) {
         $mode = if ($req.mode) { [string]$req.mode } else { 'send' }
         $key = if ($req.key) { [string]$req.key } else { 'enter' }
         $delay = if ($null -ne $req.delayMs) { [int]$req.delayMs } else { 80 }
-        Write-Result (Send-KeysTo $h $mode $key $delay ([string]$req.prefix) ([string]$req.exe))
+        Write-Result (Send-KeysTo $h $mode $key $delay ([string]$req.prefix) ([string]$req.exe) ([bool]$req.media) ([bool]$req.focusInput) ([uint32]$req.clipboardSequence))
       }
       'icon' {
         $h = [IntPtr]([int64]$req.hwnd)
