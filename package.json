@@ -14,6 +14,7 @@
     "test:media": "node scripts/unit-media.cjs"
   },
   "dependencies": {
+    "koffi": "3.3.8",
     "pinyin-pro": "^3.29.5",
     "ws": "^8.22.1"
   },
@@ -59,7 +60,8 @@
     "publish": null,
     "asar": true,
     "asarUnpack": [
-      "electron/win32-daemon.ps1"
+      "electron/win32-daemon.ps1",
+      "node_modules/@koromix/koffi-win32-x64/**/*"
     ]
   },
   "devDependencies": {

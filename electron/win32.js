@@ -23,6 +23,25 @@ let reqId = 0
 const pending = new Map()
 const bus = new EventEmitter()
 let buffer = ''
+let snapshotBackend
+
+function nativeSnapshot(method, hwnd) {
+  // undefined means unavailable: preserve the existing daemon fallback.
+  if (snapshotBackend === undefined) {
+    try { snapshotBackend = require('./win32-snapshot').createSnapshotBackend() }
+    catch (e) {
+      snapshotBackend = null
+      console.warn('[win32] native snapshot unavailable; using daemon:', e.message)
+    }
+  }
+  if (!snapshotBackend) return undefined
+  try { return snapshotBackend[method](hwnd) }
+  catch (e) {
+    snapshotBackend = null
+    console.warn('[win32] native snapshot failed; using daemon:', e.message)
+    return undefined
+  }
+}
 
 function isWin() {
   return process.platform === 'win32'
@@ -36,7 +55,7 @@ function ensureDaemon() {
     try {
       const c = spawn(
         'powershell.exe',
-        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT],
+        ['-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT],
         { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] },
       )
       child = c
@@ -142,6 +161,8 @@ async function listOpenApps() {
 
 async function getForeground() {
   if (!isWin()) return null
+  const snapshot = nativeSnapshot('getForeground')
+  if (snapshot !== undefined) return snapshot
   try {
     const res = await request({ op: 'fg' })
     return res?.window || null
@@ -152,6 +173,8 @@ async function getForeground() {
 
 async function getWindowRect(hwnd) {
   if (!isWin() || !hwnd) return null
+  const snapshot = nativeSnapshot('getWindowRect', hwnd)
+  if (snapshot !== undefined) return snapshot
   try {
     const res = await request({ op: 'rect', hwnd: Number(hwnd) })
     return res?.window || null
@@ -170,7 +193,7 @@ async function activateWindow(hwnd) {
   }
 }
 
-async function sendKeys(hwnd, { mode = 'send', key = 'enter', delayMs = 80, prefix = '', exe = '' } = {}) {
+async function sendKeys(hwnd, { mode = 'send', key = 'enter', delayMs = 80, prefix = '', exe = '', media = false, focusInput = false, clipboardSequence = 0 } = {}) {
   if (!isWin()) return { ok: false, method: 'unsupported' }
   try {
     const res = await request({
@@ -181,7 +204,10 @@ async function sendKeys(hwnd, { mode = 'send', key = 'enter', delayMs = 80, pref
       delayMs,
       prefix,
       exe,
-    }, 15000)
+      media,
+      focusInput,
+      clipboardSequence,
+    }, Math.max(15000, Math.max(0, Math.min(10000, Number(delayMs) || 0)) * 2 + 8000))
     return { ...res, ok: !!res?.ok, method: res?.method || 'sendkeys', error: res?.error }
   } catch (e) {
     return { ok: false, method: 'sendkeys-failed', error: String(e) }
@@ -210,6 +236,7 @@ function dispose() {
 }
 
 module.exports = {
+  writeFileClipboard: paths => request({ op: 'clipboard-files', paths }, 15000),
   isWin,
   ensureDaemon,
   listOpenApps,
