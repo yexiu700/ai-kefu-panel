@@ -125,6 +125,8 @@
 
   let toastTimer = 0
   function toast(msg, kind = '') {
+    // Only failures and warnings that require user action belong in the toast.
+    if (kind !== 'err' && kind !== 'warn') return
     const el = $('#toast')
     el.textContent = msg
     el.className = 'toast' + (kind ? ' ' + kind : '')
@@ -234,7 +236,7 @@
     return `<div class="row${title ? '' : ' no-title'}${fq ? ' fq' : ''}${S.busyId === p.id ? ' busy' : ''}" data-i="${idx}" data-id="${esc(p.id)}">` +
       (title ? `<div class="t"><span${tcStyle}>${highlight(title, tokens)}</span>` +
         (showGroup && !fq ? `<span class="tag">${esc(g.name)}</span>` : '') +
-        (media ? `<span class="tag" title="附带图片/文件需在管理窗发送">+${media} 附件</span>` : '') + `</div>` : '') +
+        (media ? `<span class="tag" title="填入/发送时粘贴图片和附件，请核对目标窗口">+${media} 附件</span>` : '') + `</div>` : '') +
       `<div class="c" title="${esc(content)}">${highlight(snippet(content, tokens), tokens)}</div>` +
       `<div class="acts">` +
         `<button class="star${p.favorite ? ' on' : ''}" data-act="fav" title="${p.favorite ? '取消收藏' : '收藏'}">${p.favorite ? '★' : '☆'}</button>` +
@@ -344,10 +346,10 @@
 
   async function usePhrase(p, act) {
     if (!p || S.busyId) return
-    if (act === 'copy' || !hasTarget()) {
+    if (act === 'copy' || (!hasTarget() && !(p.images?.length || p.files?.length))) {
       await copyText(p.content || '')
       bumpUsage(p.id)
-      toast(hasTarget() ? '已复制' : '已复制，请在聊天窗粘贴（未连接聊天窗）', hasTarget() ? '' : 'warn')
+      if (!hasTarget()) toast('已复制，请在聊天窗粘贴（未连接聊天窗）', 'warn')
       return
     }
     S.busyId = p.id; renderList()
@@ -356,18 +358,17 @@
       const r = await invoke('send_phrase', { phraseId: p.id, mode: act })
       bumpUsage(p.id)
       if (r?.unbound || r?.mode === 'clipboard') {
-        await copyText(p.content || '')
+        if (!r?.hasMedia) await copyText(p.content || '')
         toast(r?.message || '已复制，请手动粘贴', 'warn')
       } else if (r && r.ok === false) {
-        await copyText(p.content || '')
+        if (!r?.hasMedia) await copyText(p.content || '')
         toast(sendFailureMessage(r), 'err')
       } else {
-        toast(r?.verify === 'match' ? (act === 'send' ? '已执行发送（粘贴已验证）' : '已填入，确认后回车发送') : (act === 'send' ? '已执行发送，粘贴未验证' : '已执行粘贴，未验证输入内容'), r?.verify === 'match' ? '' : 'warn')
         ok = true
       }
     } catch (e) {
-      await copyText(p.content || '')
-      toast('发送失败，已复制：' + (e?.message || e), 'err')
+      if (!(p.images?.length || p.files?.length)) await copyText(p.content || '')
+      toast('发送失败：' + (e?.message || e), 'err')
     } finally {
       S.busyId = null; renderList()
     }
@@ -404,13 +405,11 @@
       const phrases = (g.phrases || []).map((p) => ({ ...p, id: uid(), section: p.section ? (secMap[p.section] || null) : null, favorite: false, createdAt: now, updatedAt: now }))
       add.push({ ...g, id: uid(), scope: 'company', apps: g.apps || [], sections, phrases })
     }
-    if (!add.length) { toast('默认公司话术已在库中'); return }
+    if (!add.length) return
     groups.push(...add)
     S.scope = 'company'; LS.set('aikefu.scope', S.scope)
     renderScope(); renderList()
     await saveLibrary()
-    const n = add.reduce((t, g) => t + g.phrases.length, 0)
-    toast(`已导入 ${add.length} 个分组、${n} 条默认公司话术`)
   }
 
   // ———————————————————— 问 AI ————————————————————
@@ -490,14 +489,13 @@
     if (!text) { toast('回复内容为空', 'warn'); return }
     if (act === 'copy' || !hasTarget()) {
       await copyText(text)
-      toast(hasTarget() ? '已复制' : '已复制，请在聊天窗粘贴（未连接聊天窗）', hasTarget() ? '' : 'warn')
+      if (!hasTarget()) toast('已复制，请在聊天窗粘贴（未连接聊天窗）', 'warn')
       return
     }
     try {
       const r = await invoke('assist_send', { mode: act, text })
       if (r?.unbound || r?.mode === 'clipboard') { await copyText(text); toast(r?.message || '已复制，请手动粘贴', 'warn'); return }
       if (r && r.ok === false) { await copyText(text); toast(sendFailureMessage(r), 'err'); return }
-      toast(r?.verify === 'match' ? (act === 'send' ? '已执行发送（粘贴已验证）' : '已填入，确认后回车发送') : (act === 'send' ? '已执行发送，粘贴未验证' : '已执行粘贴，未验证输入内容'), r?.verify === 'match' ? '' : 'warn')
       aiClose()
     } catch (e) {
       await copyText(text)
@@ -509,7 +507,7 @@
   async function aiCollect() {
     const content = (S.aiDraft || '').trim()
     if (!content) { toast('回复内容为空', 'warn'); return }
-    if (S.aiCollected === content) { toast('这条已收录过了'); return }
+    if (S.aiCollected === content) return
     const q = String(S.assist?.question || '').replace(/\s+/g, ' ').trim()
     const title = (q || content).slice(0, 24) + ((q || content).length > 24 ? '…' : '')
     const groups = S.library.groups || (S.library.groups = [])
@@ -538,7 +536,6 @@
       await invoke('save_library', { library: S.library, origin: 'panel' })
       S.aiCollected = content
       renderList()
-      toast('已收录到私人话术「' + (g.name || '私人') + '」')
     } catch (e) {
       g.phrases.shift()
       if (created) {
@@ -615,7 +612,7 @@
     const html = `<div class="sec">选择要发送到的聊天窗</div>` +
       apps.slice(0, 40).map((a) => item('w', a.title, { sub: String(a.exe || '').replace(/\.exe$/i, ''), extra: `data-hwnd="${a.hwnd}" title="${esc(a.title)}"` })).join('')
     openPop($('#targetBtn'), html, async (_k, ds) => {
-      try { await invoke('pin_window', { hwnd: Number(ds.hwnd) }); toast('已锁定该窗口') } catch (e) { toast('锁定失败：' + (e?.message || e), 'err') }
+      try { await invoke('pin_window', { hwnd: Number(ds.hwnd) }) } catch (e) { toast('锁定失败：' + (e?.message || e), 'err') }
     })
   }
 
@@ -830,12 +827,11 @@
   async function syncFeishu(region) {
     if (syncingFeishu) return
     syncingFeishu = true
-    toast(`正在同步${region === 'overseas' ? '海外' : '国内'}公司主库…`)
     try {
       const result = await invoke('sync_company_from_feishu', { region })
       S.settings.feishuLibraryRegion = region
       if (result?.ok) await loadLibrary()
-      toast(result?.message || '同步失败', result?.ok ? '' : 'err')
+      if (!result?.ok) toast(result?.message || '同步失败', 'err')
     } catch (e) { toast('同步失败：' + (e?.message || e), 'err') }
     finally { syncingFeishu = false }
   }

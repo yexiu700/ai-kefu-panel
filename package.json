@@ -1,6 +1,6 @@
 {
   "name": "ai-kefu-panel",
-  "version": "0.2.31",
+  "version": "0.2.32",
   "description": "AI客服（原版前端 + Electron 壳）",
   "main": "electron/main.js",
   "productName": "AI客服",
