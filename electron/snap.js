@@ -5,6 +5,7 @@
  */
 const store = require('./store')
 const win32 = require('./win32')
+const { pollPolicy } = require('./snap-policy')
 
 function normalizeExe(exe) {
   return String(exe || '').trim().toLowerCase().replace(/\.exe$/i, '')
@@ -47,6 +48,7 @@ function startSnapLoop(deps) {
   let timer = null
   let lastSnapKey = ''
   let busy = false
+  let lastForegroundPoll = -Infinity
 
   async function tick() {
     if (busy) return
@@ -58,13 +60,16 @@ function startSnapLoop(deps) {
       const panel = deps.getPanelWindow?.()
       const docked = !!settings.panel?.docked
       const autoBind = settings.panel?.autoBind !== false
+      const visible = runtime.panelVisible !== false && !!panel && !panel.isDestroyed() && panel.isVisible()
+      const policy = pollPolicy({ docked, visible, autoBind, pinned: runtime.pinned,
+        now: Date.now(), lastForegroundPoll })
       const side = settings.panel?.side === 'left' ? 'left' : 'right'
       const chatApps = settings.panel?.chatApps || []
 
       let target = runtime.target
 
       // Refresh / auto-bind
-      if (runtime.pinned && target?.hwnd) {
+      if ((runtime.pinned || !autoBind) && target?.hwnd && policy.shouldRefreshRect) {
         const info = await win32.getWindowRect(target.hwnd)
         if (info && info.visible !== false) {
           const next = {
@@ -87,7 +92,8 @@ function startSnapLoop(deps) {
           deps.setTarget(next, { emit: changed })
           target = next
         }
-      } else if (autoBind) {
+      } else if (policy.shouldPollForeground) {
+        lastForegroundPoll = Date.now()
         const fg = await win32.getForeground()
         if (fg && !isOurWindow(fg.title) && matchesChatApp(fg.exe, chatApps)) {
           const next = {
@@ -112,7 +118,7 @@ function startSnapLoop(deps) {
             prev.rect.height !== next.rect.height
           deps.setTarget(next, { emit: changed })
           target = next
-        } else if (target?.hwnd && !runtime.pinned) {
+        } else if (target?.hwnd && !runtime.pinned && policy.shouldRefreshRect) {
           // keep last known rect fresh if still valid
           const info = await win32.getWindowRect(target.hwnd)
           if (info) {
@@ -131,7 +137,7 @@ function startSnapLoop(deps) {
       }
 
       // Snap follow
-      if (docked && target?.rect && panel && !panel.isDestroyed() && runtime.panelVisible !== false) {
+      if (policy.shouldSnap && target?.rect) {
         const [pw, ph] = panel.getSize()
         const { x, y } = computeSnap(target.rect, pw, ph, side, 0)
         const key = `${x},${y},${pw},${ph},${side},${target.hwnd}`
@@ -156,10 +162,11 @@ function startSnapLoop(deps) {
 
   timer = setInterval(tick, 280)
   // kick once after daemon warm-up
-  setTimeout(tick, 600)
+  const warmup = setTimeout(tick, 600)
 
   return () => {
     if (timer) clearInterval(timer)
+    clearTimeout(warmup)
     timer = null
   }
 }

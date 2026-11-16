@@ -1,0 +1,70 @@
+'use strict'
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+const vm = require('node:vm')
+const { pollPolicy } = require('../electron/snap-policy')
+const defaults = { docked: true, visible: true, autoBind: true, pinned: false, now: 280, lastForegroundPoll: 0 }
+assert.equal(pollPolicy(defaults).shouldPollForeground, true)
+assert.equal(pollPolicy({ ...defaults, now: 279 }).shouldPollForeground, false)
+for (const change of [{ docked: false }, { visible: false }]) {
+  const sleeping = pollPolicy({ ...defaults, ...change })
+  assert.equal(sleeping.shouldSnap, false)
+  assert.equal(sleeping.shouldRefreshRect, false)
+  assert.equal(sleeping.shouldPollForeground, false)
+  assert.equal(sleeping.foregroundIntervalMs, 1000)
+  assert.equal(pollPolicy({ ...defaults, ...change, now: 1000 }).shouldPollForeground, true)
+}
+assert.equal(pollPolicy({ ...defaults, autoBind: false }).shouldPollForeground, false)
+assert.equal(pollPolicy({ ...defaults, pinned: true }).shouldPollForeground, false)
+
+async function main() {
+  let tick, now = 0, foregroundCalls = 0, rectCalls = 0, positions = 0, visible = true
+  const settings = { panel: { docked: true, autoBind: true, chatApps: ['wechat.exe'] } }
+  const runtime = { pinned: false, panelVisible: true, target: null }
+  const info = { hwnd: 1, exe: 'wechat.exe', title: 'chat', visible: true,
+    left: 10, top: 20, right: 410, bottom: 820, width: 400, height: 800 }
+  const panel = { isDestroyed: () => false, isVisible: () => visible,
+    getSize: () => [300, 800], setPosition: () => { positions++ } }
+  const win32 = { isWin: () => true,
+    getForeground: async () => { foregroundCalls++; return info },
+    getWindowRect: async () => { rectCalls++; return info } }
+  const mocks = { './store': { loadSettings: () => settings }, './win32': win32, './snap-policy': { pollPolicy } }
+  const context = { module: { exports: {} }, require: id => mocks[id], console, Date: { now: () => now },
+    setInterval: fn => { tick = fn; return 1 }, setTimeout: () => 2, clearInterval() {}, clearTimeout() {} }
+  const filename = path.resolve('electron/snap.js')
+  vm.runInNewContext(fs.readFileSync(filename, 'utf8'), context, { filename })
+  const stop = context.module.exports.startSnapLoop({ getRuntime: () => runtime, getPanelWindow: () => panel,
+    setTarget: target => { runtime.target = target } })
+  await tick()
+  assert.equal(foregroundCalls, 1)
+  assert.equal(positions, 1)
+  visible = false // Native hidden state must override runtime's stale true.
+  now = 280; await tick()
+  assert.equal(foregroundCalls, 1)
+  now = 1120; await tick()
+  assert.equal(foregroundCalls, 2)
+  assert.equal(rectCalls, 0)
+  assert.equal(positions, 1)
+  runtime.pinned = true
+  now = 2240; await tick()
+  assert.equal(foregroundCalls, 2)
+  assert.equal(rectCalls, 0, 'hidden pinned target rect refresh pauses')
+  visible = true; settings.panel.docked = false
+  await tick()
+  assert.equal(rectCalls, 0, 'undocked pinned target rect refresh pauses')
+  settings.panel.docked = true
+  await tick()
+  assert.equal(rectCalls, 1, 'visible pinned dock resumes rect refresh')
+  assert.equal(positions, 2, 'visible pinned dock resumes follow')
+  runtime.pinned = false; settings.panel.docked = false; settings.panel.autoBind = false
+  now = 4000; await tick()
+  assert.equal(foregroundCalls, 2)
+  assert.equal(rectCalls, 1, 'undocked auto-bind off does no snapshot calls')
+  runtime.panelVisible = false; settings.panel.docked = true
+  await tick()
+  assert.equal(positions, 2, 'runtime hidden state also suppresses follow')
+  stop()
+  console.log('unit-snap-policy: PASS (policy + mocked loop; no real windows moved)')
+}
+main().catch(error => { console.error(error); process.exitCode = 1 })
