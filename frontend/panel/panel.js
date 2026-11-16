@@ -44,7 +44,7 @@
 
   // ———— 拼音索引：全拼 / 首字母，按文本缓存，避免每次按键重算 ————
   // py/ini 为拼接后的串，pyMap/iniMap 记录串中每个位置对应原文的字符下标，用于把拼音命中映射回中文高亮
-  const PY = window.pinyinPro
+  let PY = window.pinyinPro
   const pyCache = new Map()
   function pyInfo(text) {
     let info = pyCache.get(text)
@@ -844,6 +844,7 @@
 
   // 空闲时分批预热拼音缓存，避免首次输入时卡顿
   function warmPinyin() {
+    if (!PY) return
     const texts = []
     for (const g of S.library.groups || []) for (const p of g.phrases || []) texts.push(String(p.title || ''), String(p.content || ''))
     const idle = window.requestIdleCallback || ((cb) => setTimeout(() => cb({ timeRemaining: () => 8 }), 16))
@@ -853,6 +854,32 @@
       if (i < texts.length) idle(step)
     }
     idle(step)
+  }
+
+  function schedulePinyinLoad() {
+    if (PY) return
+    // 两帧之间让首屏先绘制，再在空闲时下载和解析较大的拼音库。
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 16))
+      idle(() => {
+        const script = document.createElement('script')
+        script.src = '/panel/vendor/pinyin-pro.js'
+        script.async = true
+        script.onload = () => {
+          if (!window.pinyinPro?.pinyin) {
+            console.warn('[pinyin] loaded without pinyin API')
+            return
+          }
+          PY = window.pinyinPro
+          // 首屏搜索可能缓存了纯文本结果，启用拼音时必须重新建立索引。
+          pyCache.clear()
+          warmPinyin()
+          if (S.q.trim()) renderList()
+        }
+        script.onerror = () => console.warn('[pinyin] load failed; plain-text search remains available')
+        document.head.appendChild(script)
+      }, { timeout: 1500 })
+    }))
   }
 
   async function boot() {
@@ -892,7 +919,7 @@
   if (!T) {
     document.body.innerHTML = '<p style="padding:20px;color:#888">请在 AI客服 应用内打开此页面</p>'
   } else {
-    boot().catch((e) => { console.error(e); toast('启动失败：' + (e?.message || e), 'err') })
+    boot().then(schedulePinyinLoad).catch((e) => { console.error(e); toast('启动失败：' + (e?.message || e), 'err') })
   }
 })()
 
