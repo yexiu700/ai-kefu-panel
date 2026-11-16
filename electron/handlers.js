@@ -10,6 +10,7 @@ const win32 = require('./win32')
 const assist = require('./assist')
 const feishu = require('./feishu-sync')
 const feishuConfig = require('./feishu-config')
+const { resolveSendRule, explicitSendMode } = require('../frontend/panel/send-rule')
 let feishuSyncPending = null
 
 /** @type {{ panelVisible: boolean, target: any, pinned: boolean, hotkeysSuspended: boolean, autostart: boolean, stubs: string[] }} */
@@ -207,12 +208,13 @@ async function handleCommand(cmd, args = {}, ctx) {
       const phrase = findPhrase(lib, args.phraseId)
       if (!phrase) throw new Error('话术不存在')
       const settings = store.loadSettings()
-      const mode = args.mode || settings.send?.mode || 'send'
+      const rule = resolveSendRule(settings, runtime.target?.exe)
+      const mode = explicitSendMode(args.mode, rule.mode)
       emitAll('send-state', { sending: true, phraseId: args.phraseId })
       try {
         const result = await sendPhrase(phrase, {
           mode,
-          key: settings.send?.key || 'enter',
+          key: rule.key,
           pasteDelayMs: settings.send?.pasteDelayMs ?? 80,
           restoreClipboard: runtime.target?.hwnd
             ? settings.send?.restoreClipboard !== false
@@ -488,10 +490,12 @@ async function handleCommand(cmd, args = {}, ctx) {
     case 'assist_send': {
       const settings = store.loadSettings()
       const text = args.text ?? assist.getAssistState()?.result?.reply ?? ''
-      if (!text) return { ok: false, method: 'empty', mode: args.mode || settings.send?.mode || 'send' }
+      const rule = resolveSendRule(settings, runtime.target?.exe)
+      const mode = explicitSendMode(args.mode, rule.mode)
+      if (!text) return { ok: false, method: 'empty', mode }
       return await sendText(text, {
-        mode: args.mode || settings.send?.mode || 'send',
-        key: settings.send?.key || 'enter',
+        mode,
+        key: rule.key,
         pasteDelayMs: settings.send?.pasteDelayMs ?? 80,
         // unbound clipboard path must keep the reply on clipboard for manual paste
         restoreClipboard: runtime.target?.hwnd

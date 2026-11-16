@@ -7,7 +7,7 @@ const { resolveUiPath, createUiHandler } = require('../electron/ui-protocol')
 const root = path.resolve('frontend')
 
 async function main() {
-  for (const asset of ['index.html', 'manager.html', 'panel/panel.js', 'panel/vendor/pinyin-pro.js',
+  for (const asset of ['index.html', 'manager.html', 'panel/panel.js', 'panel/send-rule.js', 'panel/vendor/pinyin-pro.js',
     'brand-theme.css', 'assets/TemplatesPage-BlVodupk.js', 'assets/TemplatesPage-CYL9cg58.css']) {
     assert.equal(resolveUiPath(root, `aikefu://ui/${asset}?label=panel`), path.join(root, asset))
     assert.ok(fs.statSync(path.join(root, asset)).isFile(), asset)
@@ -25,6 +25,7 @@ async function main() {
   // Exercise the real handler with a file-fetch substitute: no Electron/userData needed.
   const handler = createUiHandler(root, async url => new Response(fs.readFileSync(fileURLToPath(url))))
   for (const [asset, mime] of [['index.html', 'text/html'], ['panel/panel.js', 'text/javascript'],
+    ['panel/send-rule.js', 'text/javascript'],
     ['assets/TemplatesPage-BlVodupk.js', 'text/javascript'], ['brand-theme.css', 'text/css'],
     ['panel/default-company-library.json', 'application/json']]) {
     const response = await handler({ url: `aikefu://ui/${asset}?tab=templates`, method: 'GET' })
