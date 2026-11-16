@@ -2,7 +2,7 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const vm = require('node:vm')
-const panel = fs.readFileSync('frontend/panel/panel.js', 'utf8')
+const panel = fs.readFileSync('frontend/panel/panel.js', 'utf8').replace(/\r\n/g, '\n')
 function section(start, end) {
   const from = panel.indexOf(start)
   assert.ok(from >= 0, start)
