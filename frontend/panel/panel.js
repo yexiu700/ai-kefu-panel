@@ -148,7 +148,12 @@
 
   // ———————————————————— 目标窗口 ————————————————————
   const hasTarget = () => !!(S.target && S.target.hwnd)
-  const defaultMode = () => (S.settings?.send?.mode === 'fill' ? 'fill' : 'send')
+  // 当前聊天窗若有单独设置，默认动作跟那条；否则跟全局。发送键由主进程按同一规则决定。
+  const defaultMode = () => {
+    const resolved = window.SendRule?.resolveSendRule?.(S.settings, S.target?.exe)
+    const mode = resolved?.mode || S.settings?.send?.mode
+    return mode === 'fill' ? 'fill' : 'send'
+  }
 
   function renderTarget() {
     const dot = $('#targetDot'); const txt = $('#targetText')
@@ -618,17 +623,22 @@
 
   function openMainMenu() {
     const s = S.settings || {}
-    const mode = defaultMode()
+    const globalMode = s.send?.mode === 'fill' ? 'fill' : 'send'
     const theme = s.theme || 'auto'
     const pasteDelays = [80, 150, 300, 500, 800, 1200]
     const pasteDelay = s.send?.pasteDelayMs ?? 80
+    const rule = window.SendRule?.resolveSendRule?.(s, S.target?.exe)
+    const keyName = { enter: 'Enter', ctrl_enter: 'Ctrl+Enter', alt_s: 'Alt+S' }
     const html =
       item('manage', '管理话术') +
       item('settings', '设置') +
       item('feishu', '从飞书同步公司话术') +
       `<div class="sep"></div><div class="sec">点击话术时</div>` +
-      item('mode-send', '直接发送', { check: mode === 'send' }) +
-      item('mode-fill', '只填入，不回车', { check: mode === 'fill' }) +
+      item('mode-send', '直接发送', { check: globalMode === 'send' }) +
+      item('mode-fill', '只填入，不回车', { check: globalMode === 'fill' }) +
+      (rule?.matched
+        ? `<div class="note">当前窗口单独设置：${rule.mode === 'fill' ? '只填入' : '直接发送'}，发送键 ${esc(keyName[rule.key] || rule.key)}。上面两项改的是全局默认。</div>`
+        : '') +
       item('paste-delay', '粘贴延迟', { sub: pasteDelay + ' ms（点击切换）' }) +
       item('restore-clipboard', '恢复剪贴板', { check: s.send?.restoreClipboard !== false }) +
       item('send-logs', '打开发送日志') +
@@ -906,9 +916,12 @@
     listen('settings-changed', (s) => s && applySettings(s))
     listen('target-changed', (t) => {
       const had = hasTarget(); const prevBound = S.target?.bound
+      const prevExe = String(S.target?.exe || '')
       S.target = t
       renderTarget()
-      if (had !== hasTarget() || prevBound !== t?.bound) { renderList(); if (S.assist.phase === 'ready') renderAi(S.assist) }
+      // 换了聊天软件才重画列表：默认按钮要跟着该软件的单独设置变。窗口挪动不重画。
+      const exeChanged = prevExe.toLowerCase() !== String(t?.exe || '').toLowerCase()
+      if (had !== hasTarget() || prevBound !== t?.bound || exeChanged) { renderList(); if (S.assist.phase === 'ready') renderAi(S.assist) }
     })
     listen('assist-state', onAssist)
     listen('focus-search', () => { const q = $('#q'); q.focus(); q.select() })
