@@ -63,6 +63,37 @@ async function main() {
   assert.equal(rebound, 99)
   assert.equal(logs.at(-1).hwnd, 99)
   assert.equal(logs.at(-1).rebound, true)
+  // Fresh process: no trailing interval, and confirmed text restores immediately.
+  let fastClip = 'before'
+  const starts = [], fastLogs = []
+  const fast = load('electron/send.js', {
+    electron: { clipboard: { readText: () => fastClip, writeText: value => { fastClip = value } } },
+    './send-log': { appendSendLog: value => fastLogs.push(value) },
+    './win32': { sendKeys: async () => { starts.push(Date.now()); return { ok: true, sendKeysOk: true, verify: 'match' } } },
+  })
+  let began = Date.now()
+  await fast.sendText('single', { hwnd: 1, intervalMs: 400, pasteDelayMs: 1200 })
+  assert.ok(Date.now() - began < 140, 'no mandatory 150ms restore or trailing 400ms interval')
+  assert.equal(fastClip, 'before')
+  assert.equal(fastLogs[0].intervalWaitMs, 0)
+  assert.ok(fastLogs[0].restoreWaitMs < 30)
+  assert.equal(fastLogs[0].pasteDelayMs, 1200, 'larger delay must reach daemon unchanged')
+  began = Date.now()
+  await Promise.all([
+    fast.sendText('second', { hwnd: 1, intervalMs: 400 }),
+    fast.sendText('third', { hwnd: 1, intervalMs: 400 }),
+  ])
+  assert.ok(starts[1] - starts[0] >= 380, 'wait before second attempt')
+  assert.ok(starts[2] - starts[1] >= 380, 'serialize and space queued attempts')
+  assert.ok(Date.now() - began < 1050, 'no trailing interval on final attempt')
+  assert.ok(fastLogs[2].intervalWaitMs >= 380)
+  response = { ok: true, sendKeysOk: true, verify: 'unavailable' }
+  began = Date.now()
+  await sender.sendText('grace', { hwnd: 1, pasteDelayMs: 1200 })
+  assert.ok(Date.now() - began < 140, 'unavailable restore grace must not repeat user delay')
+  assert.ok(logs.at(-1).restoreWaitMs >= 40)
+  assert.equal(store.defaultSettings().send.pasteDelayMs, 80)
+  assert.equal(store.defaultSettings().send.intervalMs, 400)
   console.log('PASS: settings merge, JSONL writer, mismatch preservation, restore, no-restore, unbound logging')
 }
 main().catch(e => { console.error(e); process.exitCode = 1 })
