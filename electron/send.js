@@ -2,6 +2,7 @@
 const { clipboard } = require('electron')
 const win32 = require('./win32')
 const { appendSendLog } = require('./send-log')
+const { isDiagnosticSend, diagnosticReason } = require('../frontend/panel/notice')
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)) }
 // Serialize attempts: overlapping clipboard writes/restores can corrupt another paste.
 let queue = Promise.resolve()
@@ -20,10 +21,10 @@ function sendPhrase(phrase, opts = {}) {
     if (paths.length) result = await sendAttempt('', { ...opts, mediaPaths: paths, hasMedia: true })
     else result = { ok: false, hasMedia: true, verify: 'skipped', message: '没有可粘贴的媒体文件' }
     if (errors.length) {
-      result = { ...result, ok: false, mediaErrors: errors, message: [result.message, ...errors].filter(Boolean).join('；') }
+      result = { ...result, ok: false, suppressToast: false, mediaErrors: errors, message: [result.message, ...errors].filter(Boolean).join('；') }
       try { appendSendLog({ ts: new Date().toISOString(), hasMedia: true, mediaCount: paths.length, mediaErrors: errors, verify: paths.length ? result.verify : 'skipped', verifyReason: paths.length ? '部分媒体不可用，其余项参见粘贴记录' : '全部媒体文件不可用，未粘贴媒体', ok: false }) } catch { /* The per-step logger also reports write failures. */ }
     }
-    if (result.unbound && phrase.content) result.message += '；本次只复制了媒体，文字请另行复制粘贴'
+    if (result.unbound && phrase.content && result.message) result.message += '；本次只复制了媒体，文字请另行复制粘贴'
     return { ...result, hasMedia: true }
   })
   queue = attempt.catch(() => {})
@@ -59,13 +60,19 @@ async function sendAttempt(text, opts) {
       if (media && result.sendKeysOk) {
         result.verify = 'unavailable'
         result.verifyReason = '目标窗口没有可用的图片/附件回读接口，无法确认接收；媒体保留在剪贴板'
-        if (result.ok) result.message = '已执行媒体粘贴，请核对聊天窗口；媒体仍保留在剪贴板'
       }
       result.sendKeysOk = result.sendKeysOk === true
       if (result.rebound && result.hwnd) opts.onRebound?.(result)
-      if (!result.ok) {
+      if (isDiagnosticSend(result)) {
+        // 校验未确认、焦点/前台/剪贴板变化只进日志，不做成客服能看到的提示。
+        result.suppressToast = true
+        result.suppressedNotice = diagnosticReason(result)
+        result.verifyReason = result.verifyReason || result.suppressedNotice
+        if (!result.ok) delete result.message
+      } else if (!result.ok) {
         result.message = failureMessage(result)
-      } else if (restoreClipboard && prev !== null) {
+      }
+      if (result.ok && restoreClipboard && prev !== null) {
         // The daemon already waited and verified; keep an additional restore grace period.
         await sleep(Math.max(150, pasteDelayMs))
         clipboard.writeText(prev)
@@ -85,6 +92,7 @@ async function sendAttempt(text, opts) {
         executionOk: result.ok, pasteConfirmed: result.verify === 'match' ? true : result.verify === 'mismatch' ? false : null,
         phase: media ? 'media' : 'text', sendKeysOk: result.sendKeysOk, method: result.method, unbound: result.unbound,
         hasMedia: !!opts.hasMedia, mediaCount: opts.mediaPaths?.length || 0, verifyReason: result.verifyReason || (media ? '未执行或未确认媒体粘贴' : null),
+        suppressedNotice: result.suppressedNotice || null,
         error: result.error || null, elapsedMs: Date.now() - started, verify: result.verify })
     } catch (e) { console.warn('[send] log write failed:', e.code || 'unknown') }
   }
@@ -99,9 +107,6 @@ function failureMessage(r) {
   }
   if (/activation failed/i.test(err)) {
     return '没能切到聊天窗（Target activation failed），内容已复制；可点目标按钮重新「选择聊天窗…」'
-  }
-  if (r.sendKeysOk && (r.verify === 'mismatch' || /paste.*unconfirmed/i.test(err))) {
-    return '粘贴未确认成功，内容已保留在剪贴板，请手动粘贴或增加延迟'
   }
   if (err) return `${r.message || '发送失败，内容已保留在剪贴板，请手动粘贴'}（${err}）`
   return r.message || '发送失败，内容已保留在剪贴板，请手动粘贴'

@@ -11,7 +11,8 @@
     "start:manager": "electron . -- --window=manager",
     "dist": "electron-builder --win nsis",
     "test:unit": "node scripts/unit-feishu-sync.mjs",
-    "test:media": "node scripts/unit-media.cjs"
+    "test:media": "node scripts/unit-media.cjs",
+    "test:notice": "node scripts/unit-notice.cjs"
   },
   "dependencies": {
     "pinyin-pro": "^3.29.5",

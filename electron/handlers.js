@@ -5,7 +5,7 @@ const { app, dialog, shell, clipboard, BrowserWindow, nativeImage } = require('e
 const store = require('./store')
 const media = require('./media')
 const { sendText, sendPhrase } = require('./send')
-const { getLogDir } = require('./send-log')
+const { getLogDir, appendSendLog } = require('./send-log')
 const win32 = require('./win32')
 const assist = require('./assist')
 const feishu = require('./feishu-sync')
@@ -356,6 +356,14 @@ async function handleCommand(cmd, args = {}, ctx) {
       fs.mkdirSync(dir, { recursive: true })
       const error = await shell.openPath(dir)
       if (error) throw new Error(error)
+      return true
+    }
+    case 'log_notice': {
+      const message = String(args.message || '').trim()
+      if (!message) return false
+      try {
+        appendSendLog({ ts: new Date().toISOString(), channel: 'notice', level: args.level || 'info', message: message.slice(0, 500) })
+      } catch (e) { console.warn('[notice] log write failed:', e.code || 'unknown') }
       return true
     }
 

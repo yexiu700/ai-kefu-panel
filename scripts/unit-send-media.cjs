@@ -40,6 +40,7 @@ async function main() {
   r = await sender.sendPhrase({ content: '', images: ['good'], errors: ['文件不存在'] }, { hwnd: 1 })
   assert.equal(r.ok, false)
   assert.match(r.message, /文件不存在/)
+  assert.match(require('../frontend/panel/notice').presentSendResult(r).toast, /文件不存在/)
   assert.ok(events.some(e => e[0] === 'paste'))
   events.length = 0
   response = { ok: false, error: 'elevation-mismatch' }
@@ -59,7 +60,8 @@ async function main() {
   // Execute the actual panel function to catch clipboard-only early exits and overwrites.
   const panel = fs.readFileSync('frontend/panel/panel.js', 'utf8')
   let copied = 0, invoked = 0, target = false, panelResult = {ok:true,hasMedia:true,unbound:true,message:'手动粘贴'}
-  const ui = { S:{busyId:null},hasTarget:()=>target,copyText:async()=>{copied++},bumpUsage(){},toast(){},renderList(){},countUse(){},sendFailureMessage:r=>r.message,invoke:async()=>{invoked++;return panelResult} }
+  const ui = { S:{busyId:null},hasTarget:()=>target,copyText:async()=>{copied++},bumpUsage(){},toast(){},renderList(){},countUse(){},AiKefuNotice:require('../frontend/panel/notice'),invoke:async()=>{invoked++;return panelResult} }
+  ui.globalThis = ui
   vm.runInNewContext(panel.slice(panel.indexOf('  async function usePhrase('),panel.indexOf('  async function saveLibrary('))+';globalThis.use=usePhrase',ui)
   const phrase={id:'p',content:'text',images:['a']}
   await ui.use(phrase,'fill')

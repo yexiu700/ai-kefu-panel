@@ -133,6 +133,13 @@
     toastTimer = setTimeout(() => { el.hidden = true }, kind === 'err' ? 3600 : 2200)
   }
 
+  // 调试、状态和成功提示不弹窗，写进发送日志，方便事后排查。
+  function logNotice(message) {
+    const text = String(message || '').trim()
+    if (!text) return
+    invoke('log_notice', { message: text, level: 'info' }).catch(() => {})
+  }
+
   async function copyText(text) {
     try { await navigator.clipboard.writeText(text); return true } catch { /* fallthrough */ }
     const ta = document.createElement('textarea')
@@ -347,7 +354,8 @@
     if (act === 'copy' || (!hasTarget() && !(p.images?.length || p.files?.length))) {
       await copyText(p.content || '')
       bumpUsage(p.id)
-      toast(hasTarget() ? '已复制' : '已复制，请在聊天窗粘贴（未连接聊天窗）', hasTarget() ? '' : 'warn')
+      if (hasTarget()) logNotice('已复制')
+      else toast('已复制，请在聊天窗粘贴（未连接聊天窗）', 'warn')
       return
     }
     S.busyId = p.id; renderList()
@@ -355,14 +363,14 @@
     try {
       const r = await invoke('send_phrase', { phraseId: p.id, mode: act })
       bumpUsage(p.id)
+      const view = globalThis.AiKefuNotice.presentSendResult(r)
       if (r?.unbound || r?.mode === 'clipboard') {
         if (!r?.hasMedia) await copyText(p.content || '')
-        toast(r?.message || '已复制，请手动粘贴', 'warn')
-      } else if (r && r.ok === false) {
-        if (!r?.hasMedia) await copyText(p.content || '')
-        toast(sendFailureMessage(r), 'err')
-      } else {
-        toast(r?.message || (r?.verify === 'match' ? (act === 'send' ? '已执行发送（粘贴已验证）' : '已填入，确认后回车发送') : (act === 'send' ? '已执行发送，粘贴未验证' : '已执行粘贴，未验证输入内容')), r?.verify === 'match' ? '' : 'warn')
+        if (view.toast) toast(view.toast, view.kind)
+      } else if (view.toast) {
+        if (r && r.ok === false && !r.hasMedia) await copyText(p.content || '')
+        toast(view.toast, view.kind)
+      } else if (r?.ok !== false) {
         ok = true
       }
     } catch (e) {
@@ -404,13 +412,13 @@
       const phrases = (g.phrases || []).map((p) => ({ ...p, id: uid(), section: p.section ? (secMap[p.section] || null) : null, favorite: false, createdAt: now, updatedAt: now }))
       add.push({ ...g, id: uid(), scope: 'company', apps: g.apps || [], sections, phrases })
     }
-    if (!add.length) { toast('默认公司话术已在库中'); return }
+    if (!add.length) { logNotice('默认公司话术已在库中'); return }
     groups.push(...add)
     S.scope = 'company'; LS.set('aikefu.scope', S.scope)
     renderScope(); renderList()
     await saveLibrary()
     const n = add.reduce((t, g) => t + g.phrases.length, 0)
-    toast(`已导入 ${add.length} 个分组、${n} 条默认公司话术`)
+    logNotice(`已导入 ${add.length} 个分组、${n} 条默认公司话术`)
   }
 
   // ———————————————————— 问 AI ————————————————————
@@ -490,15 +498,24 @@
     if (!text) { toast('回复内容为空', 'warn'); return }
     if (act === 'copy' || !hasTarget()) {
       await copyText(text)
-      toast(hasTarget() ? '已复制' : '已复制，请在聊天窗粘贴（未连接聊天窗）', hasTarget() ? '' : 'warn')
+      if (hasTarget()) logNotice('已复制')
+      else toast('已复制，请在聊天窗粘贴（未连接聊天窗）', 'warn')
       return
     }
     try {
       const r = await invoke('assist_send', { mode: act, text })
-      if (r?.unbound || r?.mode === 'clipboard') { await copyText(text); toast(r?.message || '已复制，请手动粘贴', 'warn'); return }
-      if (r && r.ok === false) { await copyText(text); toast(sendFailureMessage(r), 'err'); return }
-      toast(r?.verify === 'match' ? (act === 'send' ? '已执行发送（粘贴已验证）' : '已填入，确认后回车发送') : (act === 'send' ? '已执行发送，粘贴未验证' : '已执行粘贴，未验证输入内容'), r?.verify === 'match' ? '' : 'warn')
-      aiClose()
+      const view = globalThis.AiKefuNotice.presentSendResult(r)
+      if (r?.unbound || r?.mode === 'clipboard') {
+        await copyText(text)
+        if (view.toast) toast(view.toast, view.kind)
+        return
+      }
+      if (view.toast) {
+        if (r && r.ok === false) await copyText(text)
+        toast(view.toast, view.kind)
+        return
+      }
+      if (r?.ok !== false) aiClose()
     } catch (e) {
       await copyText(text)
       toast('发送失败，已复制：' + (e?.message || e), 'err')
@@ -509,7 +526,7 @@
   async function aiCollect() {
     const content = (S.aiDraft || '').trim()
     if (!content) { toast('回复内容为空', 'warn'); return }
-    if (S.aiCollected === content) { toast('这条已收录过了'); return }
+    if (S.aiCollected === content) { logNotice('这条已收录过了'); return }
     const q = String(S.assist?.question || '').replace(/\s+/g, ' ').trim()
     const title = (q || content).slice(0, 24) + ((q || content).length > 24 ? '…' : '')
     const groups = S.library.groups || (S.library.groups = [])
@@ -538,7 +555,7 @@
       await invoke('save_library', { library: S.library, origin: 'panel' })
       S.aiCollected = content
       renderList()
-      toast('已收录到私人话术「' + (g.name || '私人') + '」')
+      logNotice('已收录到私人话术「' + (g.name || '私人') + '」')
     } catch (e) {
       g.phrases.shift()
       if (created) {
@@ -615,7 +632,7 @@
     const html = `<div class="sec">选择要发送到的聊天窗</div>` +
       apps.slice(0, 40).map((a) => item('w', a.title, { sub: String(a.exe || '').replace(/\.exe$/i, ''), extra: `data-hwnd="${a.hwnd}" title="${esc(a.title)}"` })).join('')
     openPop($('#targetBtn'), html, async (_k, ds) => {
-      try { await invoke('pin_window', { hwnd: Number(ds.hwnd) }); toast('已锁定该窗口') } catch (e) { toast('锁定失败：' + (e?.message || e), 'err') }
+      try { await invoke('pin_window', { hwnd: Number(ds.hwnd) }); logNotice('已锁定该窗口') } catch (e) { toast('锁定失败：' + (e?.message || e), 'err') }
     })
   }
 
@@ -830,12 +847,14 @@
   async function syncFeishu(region) {
     if (syncingFeishu) return
     syncingFeishu = true
-    toast(`正在同步${region === 'overseas' ? '海外' : '国内'}公司主库…`)
+    logNotice(`正在同步${region === 'overseas' ? '海外' : '国内'}公司主库…`)
     try {
       const result = await invoke('sync_company_from_feishu', { region })
       S.settings.feishuLibraryRegion = region
-      if (result?.ok) await loadLibrary()
-      toast(result?.message || '同步失败', result?.ok ? '' : 'err')
+      if (result?.ok) {
+        await loadLibrary()
+        logNotice(result?.message || '已同步公司主库')
+      } else toast(globalThis.AiKefuNotice.syncFailureToast(result?.message), 'err')
     } catch (e) { toast('同步失败：' + (e?.message || e), 'err') }
     finally { syncingFeishu = false }
   }
@@ -900,16 +919,4 @@
   }
 })()
 
-function sendFailureMessage(r) {
-  const err = String(r?.error || '').trim()
-  if (/elevation-mismatch/i.test(`${err} ${r?.message || ''}`)) {
-    return '京东工作台以管理员运行，请右键以管理员身份运行 AI客服（elevation-mismatch）'
-  }
-  if (/activation failed/i.test(err) || /activation failed/i.test(r?.message || '')) {
-    return '没能切到聊天窗（Target activation failed），内容已复制；可点目标按钮重新「选择聊天窗…」'
-  }
-  if (err && r?.message) return `${r.message}（${err}）`
-  if (err) return `没能发到聊天窗（${err}），内容已复制，请手动粘贴`
-  return r?.message || '没能发到聊天窗，内容已复制，请手动粘贴'
-}
 
