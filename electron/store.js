@@ -209,32 +209,56 @@ function normalizeSettings(raw) {
   return merged
 }
 
+let settingsCache = null
+
+function settingsStamp(p) {
+  try {
+    const stat = fs.statSync(p)
+    return `${stat.mtimeMs}:${stat.ctimeMs}:${stat.size}`
+  } catch (e) {
+    if (e.code === 'ENOENT') return null
+    throw e
+  }
+}
+
 function loadSettings() {
-  const defaults = defaultSettings()
-  const p = settingsPath()
-  if (!fs.existsSync(p)) {
-    saveSettings(defaults)
-    return structuredClone(defaults)
+  // Avoid recreating directories and reparsing JSON on every snap tick.
+  const p = path.join(app.getPath('userData'), 'huiyou-original-shell', 'settings.json')
+  const stamp = settingsStamp(p)
+  if (settingsCache?.path === p && settingsCache.stamp === stamp) {
+    return structuredClone(settingsCache.value)
+  }
+  if (stamp === null) {
+    saveSettings(defaultSettings())
+    return structuredClone(settingsCache.value)
   }
   try {
     const raw = JSON.parse(fs.readFileSync(p, 'utf8'))
     const next = normalizeSettings(raw)
     // 用户没 touch 过吸附开关时，强制落成不吸附并写回
-    if (!raw?.panel?.dockedTouched && (raw?.panel?.docked === true || next.panel.docked !== false)) {
-      next.panel.docked = false
+    const resetDocked = !raw?.panel?.dockedTouched && raw?.panel?.docked === true
+    const upgradeHeight = !raw?.panel?.heightTouched && raw?.panel?.floatHeight <= 640 &&
+      raw.panel.floatHeight !== next.panel.floatHeight
+    if (resetDocked || upgradeHeight) {
       saveSettings(next)
+    } else {
+      settingsCache = { path: p, stamp, value: next }
     }
-    return next
+    return structuredClone(settingsCache.value)
   } catch {
-    return structuredClone(defaults)
+    const value = defaultSettings()
+    settingsCache = { path: p, stamp, value }
+    return structuredClone(value)
   }
 }
 
 function saveSettings(settings) {
   const p = settingsPath()
+  const value = normalizeSettings(structuredClone(settings))
   const tmp = p + '.tmp'
-  fs.writeFileSync(tmp, JSON.stringify(settings, null, 2), 'utf8')
+  fs.writeFileSync(tmp, JSON.stringify(value, null, 2), 'utf8')
   fs.renameSync(tmp, p)
+  settingsCache = { path: p, stamp: settingsStamp(p), value }
 }
 
 function updateSettings(patch) {
