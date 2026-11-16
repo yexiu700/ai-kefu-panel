@@ -1,5 +1,4 @@
 'use strict'
-const http = require('node:http')
 const fs = require('node:fs')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
@@ -10,6 +9,7 @@ const store = require('./store')
 const { handleCommand, runtime, emitAll, getPanelState, setTarget } = require('./handlers')
 const win32 = require('./win32')
 const { startSnapLoop } = require('./snap')
+const { createUiHandler } = require('./ui-protocol')
 
 const ROOT = path.join(__dirname, '..')
 const FRONTEND = path.join(ROOT, 'frontend')
@@ -37,65 +37,10 @@ function appIcon() {
 let panelWindow = null
 let managerWindow = null
 let tray = null
-let staticServer = null
-let staticPort = 0
 let stopSnap = null
 
-const MIME = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp',
-  '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
-  '.woff': 'font/woff',
-  '.woff2': 'font/woff2',
-  '.ttf': 'font/ttf',
-  '.map': 'application/json',
-}
-
-function startStaticServer() {
-  return new Promise((resolve, reject) => {
-    const server = http.createServer((req, res) => {
-      try {
-        const u = new URL(req.url || '/', 'http://127.0.0.1')
-        let pathname = decodeURIComponent(u.pathname)
-        if (pathname === '/') pathname = '/index.html'
-        const filePath = path.normalize(path.join(FRONTEND, pathname))
-        if (!filePath.startsWith(FRONTEND)) {
-          res.writeHead(403); res.end('forbidden'); return
-        }
-        if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-          res.writeHead(404); res.end('not found: ' + pathname); return
-        }
-        const ext = path.extname(filePath).toLowerCase()
-        res.writeHead(200, {
-          'Content-Type': MIME[ext] || 'application/octet-stream',
-          'Cache-Control': 'no-cache',
-          'Access-Control-Allow-Origin': '*',
-        })
-        fs.createReadStream(filePath).pipe(res)
-      } catch (e) {
-        res.writeHead(500); res.end(String(e))
-      }
-    })
-    server.listen(0, '127.0.0.1', () => {
-      staticServer = server
-      staticPort = server.address().port
-      console.log(`[shell] static http://127.0.0.1:${staticPort}`)
-      resolve(staticPort)
-    })
-    server.on('error', reject)
-  })
-}
-
 function pageUrl(page, label) {
-  return `http://127.0.0.1:${staticPort}/${page}?label=${encodeURIComponent(label)}`
+  return `aikefu://ui/${page}?label=${encodeURIComponent(label)}`
 }
 
 function preloadPath() {
@@ -350,8 +295,15 @@ function registerMediaProtocol() {
   protocol.handle('huiyou-media', async (request) => {
     try {
       const u = new URL(request.url)
-      const p = u.searchParams.get('p')
-      if (!p || !fs.existsSync(p)) return new Response('not found', { status: 404 })
+      let p = u.searchParams.get('p')
+      if (!p) return new Response('not found', { status: 404 })
+      // 话术保存媒体文件名；同时兼容已有数据中的绝对路径。
+      if (!path.isAbsolute(p)) {
+        if (p !== path.basename(p)) return new Response('not found', { status: 404 })
+        p = [path.join(store.mediaDir(), p), path.join(store.stickersDir(), p)]
+          .find((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile())
+      }
+      if (!p || !fs.existsSync(p) || !fs.statSync(p).isFile()) return new Response('not found', { status: 404 })
       return net.fetch(pathToFileURL(p).href)
     } catch (e) {
       return new Response(String(e), { status: 500 })
@@ -361,6 +313,9 @@ function registerMediaProtocol() {
 
 try {
   protocol.registerSchemesAsPrivileged([{
+    scheme: 'aikefu',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true },
+  }, {
     scheme: 'huiyou-media',
     privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true },
   }])
@@ -387,7 +342,7 @@ if (!gotLock) {
     try { if (process.platform === 'win32') app.setAppUserModelId('com.arzopa.aikefu') } catch {}
     try { registerMediaProtocol() } catch (e) { console.warn('[media protocol]', e) }
 
-    await startStaticServer()
+    protocol.handle('aikefu', createUiHandler(FRONTEND, (url) => net.fetch(url)))
     wireIpc()
     store.getDataDir()
     createPanelWindow()
@@ -425,7 +380,6 @@ if (!gotLock) {
     try { globalShortcut.unregisterAll() } catch { /* ignore */ }
     try { stopSnap?.() } catch { /* ignore */ }
     try { win32.dispose() } catch { /* ignore */ }
-    try { staticServer?.close() } catch { /* ignore */ }
   })
 
   app.on('window-all-closed', () => {
