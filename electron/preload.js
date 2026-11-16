@@ -129,7 +129,7 @@ const internals = {
 try {
   contextBridge.exposeInMainWorld('__TAURI_INTERNALS__', internals)
   contextBridge.exposeInMainWorld('isTauri', true)
-  contextBridge.exposeInMainWorld('__HUIYOU_SHELL__', { label: windowLabel, version: '0.2.30' })
+  contextBridge.exposeInMainWorld('__HUIYOU_SHELL__', { label: windowLabel, version: require('../package.json').version })
 } catch (e) {
   // contextIsolation disabled fallback
   window.__TAURI_INTERNALS__ = internals
