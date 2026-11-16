@@ -27,3 +27,21 @@ Desktop.ini
 .DS_Store
 
 dist/
+# local prompts, reviews, and scratch — never commit
+CODEX-PROMPT*.txt
+CLAUDE-CODE-*.md
+FINDINGS*.md
+REVIEW-*.md
+findings*.md
+progress.md
+task_plan.md
+run-codex-*
+codex-*.last.txt
+*.log.err
+_ref_*
+feishu-field-*.json
+feishu-fields-create.json
+install-023.cmd
+verify-023.py
+docs/bugs/
+

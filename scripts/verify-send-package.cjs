@@ -9,7 +9,7 @@ for (const file of ['frontend/panel/panel.js', 'electron/handlers.js', 'electron
 }
 const panel = asar.extractFile(archive, ['frontend','panel','panel.js'].join(path.sep)).toString('utf8')
 for (const label of ['粘贴延迟','恢复剪贴板','打开发送日志','elevation-mismatch','Target activation failed','没能切到聊天窗','京东工作台以管理员运行']) assert.ok(panel.includes(label), label)
-assert.equal(JSON.parse(asar.extractFile(archive, 'package.json')).version, '0.2.27')
+assert.equal(JSON.parse(asar.extractFile(archive, 'package.json')).version, require('../package.json').version)
 assert.deepEqual(fs.readFileSync('dist/win-unpacked/resources/app.asar.unpacked/electron/win32-daemon.ps1'), fs.readFileSync('electron/win32-daemon.ps1'))
 console.log('PASS: packaged version, Chinese menu labels, five runtime source files and unpacked daemon match')
 

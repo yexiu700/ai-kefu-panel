@@ -88,7 +88,14 @@ async function invoke(cmd, args = {}, options) {
     return null
   }
 
-  return ipcRenderer.invoke('tauri-invoke', { cmd, args: args || {}, options, windowLabel })
+  if (cmd === 'import_image' || cmd === 'import_file') {
+    args = { bytes: args, fileName: cmd === 'import_file' ? decodeURIComponent(options?.headers?.['x-file-name'] || '') : '' }
+  }
+  const result = await ipcRenderer.invoke('tauri-invoke', { cmd, args: args || {}, options, windowLabel })
+  if (['pick_file', 'get_image_bytes', 'get_file_bytes'].includes(cmd) && ArrayBuffer.isView(result)) {
+    return result.buffer.slice(result.byteOffset, result.byteOffset + result.byteLength)
+  }
+  return result
 }
 
 function transformCallback(callback, once = false) {
@@ -122,7 +129,7 @@ const internals = {
 try {
   contextBridge.exposeInMainWorld('__TAURI_INTERNALS__', internals)
   contextBridge.exposeInMainWorld('isTauri', true)
-  contextBridge.exposeInMainWorld('__HUIYOU_SHELL__', { label: windowLabel, version: '0.2.18-shell' })
+  contextBridge.exposeInMainWorld('__HUIYOU_SHELL__', { label: windowLabel, version: '0.2.30' })
 } catch (e) {
   // contextIsolation disabled fallback
   window.__TAURI_INTERNALS__ = internals
