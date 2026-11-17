@@ -223,7 +223,7 @@
   }
 
   // 行布局：左 标题+正文；右 ★ / 填入 / 发送 常显（未连接聊天窗时 usePhrase 会改为复制并提示）
-  // fq：常用区的行 —— 已连接时主按钮固定为「发送」、点整行即发送；未连接时只给「复制」
+  // fq：常用区的行 —— 已连接时主按钮与点整行跟随设置（按软件或全局默认方式）；未连接时只给「复制」
   function rowHtml(p, g, idx, tokens, showGroup, fq = false) {
     const title = String(p.title || '').trim()
     const content = String(p.content || '')
@@ -236,7 +236,7 @@
       ? `<button data-act="fill" class="${mode === 'fill' ? 'primary' : ''}"${tip}>填入</button>` +
         `<button data-act="send" class="${mode === 'send' ? 'primary' : ''}"${tip}>发送</button>`
       : hasTarget()
-        ? `<button data-act="fill">填入</button><button data-act="send" class="primary">发送</button>`
+        ? `<button data-act="fill" class="${mode === 'fill' ? 'primary' : ''}">填入</button><button data-act="send" class="${mode === 'send' ? 'primary' : ''}">发送</button>`
         : `<button data-act="copy" class="primary" title="未连接聊天窗：复制后到聊天窗粘贴">复制</button>`
     return `<div class="row${title ? '' : ' no-title'}${fq ? ' fq' : ''}${S.busyId === p.id ? ' busy' : ''}" data-i="${idx}" data-id="${esc(p.id)}">` +
       (title ? `<div class="t"><span${tcStyle}>${highlight(title, tokens)}</span>` +
@@ -808,8 +808,8 @@
       const btn = e.target.closest('[data-act]')
       const act = btn?.dataset.act
       if (act === 'fav') { toggleFav(r.p); return }
-      // 常用区：点整行就发送（已连接时），少一步
-      const dflt = !hasTarget() ? 'copy' : (row.classList.contains('fq') ? 'send' : defaultMode())
+      // 点整行（含常用区）：跟随当前聊天软件单独设置或全局默认发送方式
+      const dflt = !hasTarget() ? 'copy' : defaultMode()
       usePhrase(r.p, act || dflt)
     })
 
