@@ -28,6 +28,9 @@ npm test -- send         # 按关键字过滤只跑相关单测（如 send / fei
 | `scripts/unit-feishu-sync.mjs` | 飞书多维表格单元格解析、公司/私人归属过滤、稳定 ID `feishu:<record_id>` 继承收藏与 `useCount`、热键避让、双区域隔离、分页与中文报错 |
 | `scripts/unit-feishu-config.cjs` | `feishu-config.js` 导入白名单、新旧前缀别名合并、注释保留、脱敏状态、原子写入失败保留原文件 |
 | `scripts/unit-media.cjs` | `media.js` + `handlers.js` 图片/附件选择与导入、PNG/JPEG/GIF/WebP/BMP 魔数校验、路径穿越拦截、权限报错 |
+| `scripts/unit-store-corrupt.cjs` | `store.loadLibrary()` 遇到损坏 JSON / 非对象根结构时先完整拷入 `backups/library-corrupt-*.json.bak` 再初始化空库、磁盘满时不覆盖原文件 |
+| `scripts/unit-hotkeys.cjs` | 全局热键（显隐/搜索/问 AI）与话术全局热键注册、冲突优先级、`group.apps` 按进程激活、动态重绑与录制挂起 |
+| `scripts/unit-search.cjs` | 真实加载 `pinyin-pro.js` 验证标题-only 搜索、全拼字首对齐、首字母顺序匹配、排序权重、超长标题不截断无省略号与正文 `snippet`/`highlight` |
 
 ### Tier 2：Electron 无头冒烟与 Windows 隔离脚本（按需在有环境时运行）
 
@@ -55,17 +58,18 @@ node scripts/verify-send-package.cjs
 - [ ] **按软件发送规则**：在京麦等配置了 `Ctrl+Enter` 或 `只填入` 的窗口，点整行、按 `Enter`、点「填入 / 发送」按钮的行为与预期一致。
 - [ ] **文字与媒体混合粘贴**：发送含文字 + 多张图片/中文名附件的话术，先贴文字再贴文件，目标输入框正确收到且剪贴板保留/恢复符合预期。
 - [ ] **异常兜底**：管理员权限运行的京东工作台弹出 `elevation-mismatch` 中文提示；未连接聊天窗时仅复制并弹 `warn` 提示。
-- [ ] **全局热键**：显隐面板（`Ctrl+Alt+K`）、聚焦搜索（`Ctrl+Alt+F`）等无冲突且响应正常。
+- [ ] **全局热键**：显隐面板（`Ctrl+Alt+K`）、聚焦搜索（`Ctrl+Alt+F`）、问 AI（`Ctrl+Alt+J`）及单条话术热键响应正常。
 
 ---
 
 ## 2. ⚠️ 修改前端文件时的「源码切片锚点」注意事项
 
-本仓库有 4 个单测通过 `String.prototype.indexOf` 从源码中截取函数放进 `vm.runInNewContext` 执行。**修改对应文件时请保留这些函数签名与注释锚点的先后顺序**（若确需重构函数结构，请同步更新对应单测切片位置）：
+本仓库有多个单测通过 `String.prototype.indexOf` 从源码中截取函数放进 `vm.runInNewContext` 执行。**修改对应文件时请保留这些函数签名与注释锚点的先后顺序**（若确需重构函数结构，请同步更新对应单测切片位置）：
 
 | 目标文件 | 单测脚本 | 依赖的起止锚点字符串 |
 | --- | --- | --- |
 | `frontend/panel/panel.js` | `scripts/unit-pinyin-lazy.cjs` | `'  let PY ='` → `'  function highlight('`，以及 `'  function warmPinyin()'` → `'  async function boot()'` |
+| `frontend/panel/panel.js` | `scripts/unit-search.cjs` | `'  const esc ='` → `'  let toastTimer ='`，以及 `'  const hasTarget ='` → `'  function paintActive('` |
 | `frontend/panel/panel.js` | `scripts/unit-toasts.cjs` | `'  async function usePhrase('` → `'  async function saveLibrary('`；`'  async function aiUse('` → `'  // 收录：'`；`'  async function syncFeishu('` → `'  async function loadLibrary('`；`'  let toastTimer ='` → `'\n  }\n'`；`'function sendFailureMessage('` |
 | `frontend/panel/panel.js` | `scripts/unit-send-media.cjs` | `'  async function usePhrase('` → `'  async function saveLibrary('` |
 | `frontend/assets/GuideSpotlight-Bc_qirTp.js` | `scripts/unit-toasts.cjs` | `'const xf={info:'` → `'const Jh=Symbol('` |
