@@ -16,7 +16,7 @@
 
 - **为什么：** 设置和说明里的默认热键是 `Ctrl+Alt+J`，`registerHotkeys()` 只注册了显隐和聚焦搜索。热键只在启动时注册一次，管理窗口里改过要重启才生效。
 - **大小：** 小。主进程发出事件让面板走现有的 `askAi()`，不要在热键回调里直接发消息。
-- **状态：** 未做。建议作为下一次迭代。
+- **状态：** 已完成（迭代 #3）。统一收口到 `electron/hotkeys.js`：启动、`update_settings`、以及录制快捷键结束 `suspend_hotkeys(false)` 时动态重注册并回传占用冲突 `hotkeyFailures`；`Ctrl+Alt+J` 发出 `trigger-assist` 事件交由面板 `askAi()` 处理，同时修复清空 `focusSearch`/`assist` 为空字符串后被重置回默认值的问题。
 
 ### 3. 话术库读坏时先留下原文件
 
@@ -88,3 +88,10 @@
 - 项目 AI 化与文档体系梳理：升级 `AGENTS.md`（任务寻址表、快速命令、不变量红线），新增 `CLAUDE.md`、`docs/architecture.md`、`docs/ipc-contracts.md`、`docs/testing-and-workflow.md`、`docs/README.md`；将根目录历史结果文档归档至 `docs/history/`，移除过时的 `START.txt`。
 - 统一测试与 CI 闭环：修复 `scripts/unit-media.cjs`（及 `verify-media-ui.cjs` 兜底）对 `.gitignore` 忽略文件 `docs/bugs/add-image-fail.jpg` 与未安装 `electron` 的硬依赖；新增零依赖统一运行器 `scripts/run-tests.cjs` 并接入 `npm test` / `npm run check` / `npm run test:win`；新增 GitHub Actions CI 与 PR 检查模板。
 - 验证：`npm test`（42 个文件语法检查 + 12 个跨平台单测套件全部通过）与 `git diff --check` 通过。未改动业务运行时代码与版本号。
+
+### #3
+
+- 完成第 2 项：新增 `electron/hotkeys.js` 统一管理显隐（`togglePanel`）、搜索（`focusSearch`）、问 AI（`assist`）全局热键注册、占用冲突检测（`{ hotkey, reason }`）与挂起恢复。
+- `update_settings` 与 `suspend_hotkeys` 动态重注册全局热键并同步 `hotkeyFailures`，无需重启应用；`store.normalizeSettings` 保留用户清空可选热键（`""`）。
+- 问 AI 热键通过 `trigger-assist` 事件唤起面板并调用 `askAi()`，不在热键回调中直接发消息。
+- 验证：新增 `scripts/unit-hotkeys.cjs` 并纳入 `npm test` 全量通过；Windows 实机全局热键触发与占用提示待手测。

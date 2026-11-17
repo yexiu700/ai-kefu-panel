@@ -141,7 +141,7 @@ async function handleCommand(cmd, args = {}, ctx) {
       emitAll('settings-changed', next)
       // reflect alwaysOnTop / width
       try {
-        const panel = ctx.getPanelWindow?.()
+        const panel = ctx?.getPanelWindow?.()
         if (panel && !panel.isDestroyed()) {
           if (typeof next.panel?.alwaysOnTop === 'boolean') panel.setAlwaysOnTop(next.panel.alwaysOnTop)
           if (typeof next.panel?.width === 'number') {
@@ -150,8 +150,9 @@ async function handleCommand(cmd, args = {}, ctx) {
           }
         }
       } catch { /* ignore */ }
+      const hotkeyFailures = asFailureList(ctx?.syncHotkeys?.())
       // 原版：updateSettings → { settings, hotkeyFailures }；缺 settings 会让 chatApps.filter 炸
-      return { settings: next, hotkeyFailures: [] }
+      return { settings: next, hotkeyFailures }
     }
 
     case 'get_target':
@@ -166,7 +167,7 @@ async function handleCommand(cmd, args = {}, ctx) {
       return getPanelState()
 
     case 'get_hotkey_failures':
-      return asFailureList([])
+      return asFailureList(ctx?.getHotkeyFailures?.())
 
     case 'get_app_info':
       return {
@@ -201,6 +202,7 @@ async function handleCommand(cmd, args = {}, ctx) {
 
     case 'suspend_hotkeys':
       runtime.hotkeysSuspended = !!args.suspended
+      ctx?.syncHotkeys?.()
       return true
 
     case 'send_phrase': {
