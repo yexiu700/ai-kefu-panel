@@ -10,8 +10,12 @@
     "start:panel": "electron . -- --window=panel",
     "start:manager": "electron . -- --window=manager",
     "dist": "electron-builder --win nsis",
+    "check": "node scripts/run-tests.cjs --check-only",
+    "test": "node scripts/run-tests.cjs",
+    "test:win": "node scripts/run-tests.cjs --win",
     "test:unit": "node scripts/unit-feishu-sync.mjs",
-    "test:media": "node scripts/unit-media.cjs"
+    "test:media": "node scripts/unit-media.cjs",
+    "smoke:ui": "node scripts/smoke-ui-protocol.cjs"
   },
   "dependencies": {
     "koffi": "3.3.8",

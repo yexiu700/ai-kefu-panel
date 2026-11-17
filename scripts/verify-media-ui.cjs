@@ -1,4 +1,4 @@
-﻿// Run with Electron. Uses an isolated temporary library and real bundled renderer/preload/IPC.
+// Run with Electron. Uses an isolated temporary library and real bundled renderer/preload/IPC.
 const {app,BrowserWindow,ipcMain,dialog,protocol,net}=require('electron')
 const fs=require('fs'),path=require('path'),http=require('http'),assert=require('assert/strict'),os=require('os')
 const root=process.argv[2]?path.resolve(process.argv[2]):path.resolve(__dirname,'..')
@@ -10,7 +10,8 @@ protocol.registerSchemesAsPrivileged([{scheme:'huiyou-media',privileges:{standar
 app.whenReady().then(async()=>{
  const store=require(path.join(root,'electron/store.js'))
  const {handleCommand}=require(path.join(root,'electron/handlers.js'))
- const image=fs.readFileSync(path.join(__dirname,'../docs/bugs/add-image-fail.jpg'))
+ const bugJpg=path.join(__dirname,'../docs/bugs/add-image-fail.jpg')
+ const image=fs.existsSync(bugJpg)?fs.readFileSync(bugJpg):Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAj/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAAAP/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AN//Z','base64')
  const input=path.join(temp,'sample.jpg');fs.writeFileSync(input,image)
  dialog.showOpenDialog=async()=>({canceled:false,filePaths:[input]})
  store.saveLibrary({version:1,groups:[{id:'test',name:'测试分组',scope:'private',phrases:[]}],stickers:[]},{skipBackup:true})
