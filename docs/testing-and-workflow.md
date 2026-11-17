@@ -74,6 +74,7 @@ node scripts/verify-send-package.cjs
 | `frontend/panel/panel.js` | `scripts/unit-search.cjs` | `'  const esc ='` → `'  let toastTimer ='`、`'  const hasTarget ='` → `'  function paintActive('`、`'  function bind()'` → `'  // ———————————————————— 启动 ————————————————————'` |
 | `frontend/panel/panel.js` | `scripts/unit-toasts.cjs` | `'  async function usePhrase('` → `'  async function saveLibrary('`；`'  async function aiUse('` → `'  // 收录：'`；`'  async function syncFeishu('` → `'  async function loadLibrary('`；`'  let toastTimer ='` → `'\n  }\n'`；`'function sendFailureMessage('` |
 | `frontend/panel/panel.js` | `scripts/unit-send-media.cjs` | `'  async function usePhrase('` → `'  async function saveLibrary('` |
+| `frontend/panel/panel.js` | `scripts/unit-send-rule.cjs` | `'  const esc ='` → `'  // ———— 拼音索引'`、`'  const hasTarget ='` → `'  function renderTarget()'`、`'  function rowHtml('` → `'  function renderList()'`、`'  function bind()'` → `'  // ———————————————————— 启动 ————————————————————'` |
 | `frontend/panel/panel.js` | `scripts/unit-menu-paths.cjs` | `'  const esc ='` → `'  let toastTimer ='`、`'  const item ='` → `'  function openTargetMenu()'`、`'  function openMainMenu()'` → `'  async function patchSettings('` |
 | `frontend/assets/GuideSpotlight-Bc_qirTp.js` | `scripts/unit-toasts.cjs` | `'const xf={info:'` → `'const Jh=Symbol('` |
 | `frontend/assets/manager-DBuMfWSZ.js` | `scripts/unit-manager-lazy.cjs` | `'const mr="modulepreload"'` → `',gr=['` |

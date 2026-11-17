@@ -88,7 +88,7 @@ npm run dist
    - `fill` 模式绝不按发送键。
    - 剪贴板恢复仅针对已绑定窗口且成功的纯文字；**媒体粘贴、发送失败、未绑定窗口绝不恢复覆盖剪贴板**。
    - 未绑定窗口或无法回读校验（`unavailable`）时，绝不声称目标窗口已确认收到。
-6. **按软件单独发送规则**：存于 `settings.send.appRules`（`{ exe, mode, key }`，空值跟随全局），统一在 `frontend/panel/send-rule.js` 解析。进程名去掉 `.exe` 后按**全名相等（忽略大小写）**匹配，严禁用 `includes`（避免 `qq` 误匹配 `qqbrowser`）。显式点击「填入 / 发送」按钮以本次点击为准；常用区在已连接时点整行仍直接发送（见 `ROADMAP.md` #8）。
+6. **按软件单独发送规则**：存于 `settings.send.appRules`（`{ exe, mode, key }`，空值跟随全局），统一在 `frontend/panel/send-rule.js` 解析。进程名去掉 `.exe` 后按**全名相等（忽略大小写）**匹配，严禁用 `includes`（避免 `qq` 误匹配 `qqbrowser`）。显式点击「填入 / 发送」按钮以本次点击为准；普通行与常用区点整行在已连接时均跟随当前软件或全局默认发送方式。
 7. **问 AI 边界**：只读系统剪贴板文本，**绝不做自动截屏、OCR 或读取聊天窗口内容**。
 8. **飞书同步边界**：只替换公司分组（`scope !== 'private'`），**绝不清除私人话术与表情**。公司话术 ID 保持 `feishu:<record_id>` 稳定，以保留本地收藏（`favorite`）与使用统计（`useCount`、`lastUsedAt`）。
 9. **原版前端 IPC 返回兼容**：`update_settings` 必须返回 `{ settings, hotkeyFailures }`；`save_library` 必须返回 `{ hotkeyFailures, conflict }`；`pick_images`/`pick_files` 必须返回带可遍历 `errors` 数组的对象；`submission_action` 列表类必须返回 `[]`（详见 [`docs/ipc-contracts.md`](docs/ipc-contracts.md)）。
