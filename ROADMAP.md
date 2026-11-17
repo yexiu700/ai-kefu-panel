@@ -66,7 +66,7 @@
 
 - **为什么：** `electron/win32.js` 把应答按队列顺序对上请求。daemon 是一条条处理的，所以现在通常没事；哪天一个操作写出两行或漏一行，吸附和发送就会串结果。
 - **大小：** 小。请求带 id，应答带回 id。不要改粘贴和发送键的行为。
-- **状态：** 未做。
+- **状态：** 已完成（迭代 #8）。`electron/win32.js` 为每次请求附带自增 `id`，`electron/win32-daemon.ps1` 的 `Write-Result` 自动回传当前请求 `id`；Node 侧优先按 `msg.id` 精确匹配 `pending` 请求并剥离传输 `id`，将超时迟到或重复输出的响应隔离为 `orphan`，防止吸附与发送串结果。
 
 ## 先不做
 
@@ -116,3 +116,8 @@
 
 - 完成第 7 项：`frontend/panel/panel.js` 的 `#q` 搜索输入改为 90ms 防抖合并，跳过中文输入法 `compositionstart`~`compositionend` 中间击键整表重绘；清除输入（`#clearQ` / `Escape` / 退格删空）保持零延迟刷新；键盘 `Enter`、上下方向键、`Alt+1..9` 操作前同步执行 `flushSearch()`，确保快打秒回车绝不读取陈旧 `S.rows`。
 - 验证：在 `scripts/unit-search.cjs` 补充连续打字防抖、输入法合成防抖、秒按回车同步刷新与清空即刻重绘单测，`npm test` 全量通过。
+
+### #8
+
+- 完成第 10 项：`electron/win32.js` 请求附带自增 `id`，`electron/win32-daemon.ps1` 的 `Write-Result` 自动将 `$script:currentReqId` 写回应答 JSON；`win32.js` 按 `id` 匹配 `pending` 请求并隔离迟到超时包与重复行，未改动任何粘贴或发送键行为。
+- 验证：新增跨平台隔离单测 `scripts/unit-win32-rpc.cjs` 并在 Windows AST 单测 `scripts/unit-paste-wait.ps1` 增加 `Write-Result` 请求 ID 回传断言，`npm test` 全量通过。

@@ -30,7 +30,8 @@ npm test -- send         # 按关键字过滤只跑相关单测（如 send / fei
 | `scripts/unit-media.cjs` | `media.js` + `handlers.js` 图片/附件选择与导入、PNG/JPEG/GIF/WebP/BMP 魔数校验、路径穿越拦截、权限报错 |
 | `scripts/unit-store-corrupt.cjs` | `store.loadLibrary()` 遇到损坏 JSON / 非对象根结构时先完整拷入 `backups/library-corrupt-*.json.bak` 再初始化空库、磁盘满时不覆盖原文件 |
 | `scripts/unit-hotkeys.cjs` | 全局热键（显隐/搜索/问 AI）与话术全局热键注册、冲突优先级、`group.apps` 按进程激活、动态重绑与录制挂起 |
-| `scripts/unit-search.cjs` | 真实加载 `pinyin-pro.js` 验证标题-only 搜索、全拼字首对齐、首字母顺序匹配、排序权重、超长标题不截断无省略号与正文 `snippet`/`highlight` |
+| `scripts/unit-search.cjs` | 真实加载 `pinyin-pro.js` 验证标题-only 搜索、全拼字首对齐、首字母顺序匹配、排序权重、超长标题不截断无省略号、正文 `snippet`/`highlight` 及输入防抖同步刷新 |
+| `scripts/unit-win32-rpc.cjs` | `electron/win32.js` 与 `win32-daemon.ps1` 请求/应答 `id` 关联、半包拼接、重复行与超时迟到包隔离 |
 
 ### Tier 2：Electron 无头冒烟与 Windows 隔离脚本（按需在有环境时运行）
 
@@ -74,7 +75,7 @@ node scripts/verify-send-package.cjs
 | `frontend/panel/panel.js` | `scripts/unit-send-media.cjs` | `'  async function usePhrase('` → `'  async function saveLibrary('` |
 | `frontend/assets/GuideSpotlight-Bc_qirTp.js` | `scripts/unit-toasts.cjs` | `'const xf={info:'` → `'const Jh=Symbol('` |
 | `frontend/assets/manager-DBuMfWSZ.js` | `scripts/unit-manager-lazy.cjs` | `'const mr="modulepreload"'` → `',gr=['` |
-| `electron/win32-daemon.ps1` | `scripts/smoke-win32-snapshot.cjs` | 文件开头 → `'function List-OpenApps'`；`unit-paste-wait.ps1` 按 AST 提取 `Wait-PasteResult`、`Test-TargetForeground`、`Activate-Hwnd` |
+| `electron/win32-daemon.ps1` | `scripts/smoke-win32-snapshot.cjs` | 文件开头 → `'function List-OpenApps'`；`unit-paste-wait.ps1` 按 AST 提取 `Wait-PasteResult`、`Test-TargetForeground`、`Activate-Hwnd`、`Write-Result` |
 
 ---
 

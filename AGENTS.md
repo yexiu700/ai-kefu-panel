@@ -101,6 +101,7 @@ npm run dist
 - 不要改 `huiyou-original-shell` 目录名，不要迁移用户数据目录，单测一律用 `os.tmpdir()` 临时目录。
 - 不要顺手升级 `electron`、`koffi`、`pinyin-pro` 或改动 `package.json` 的 `version`，除非任务明确要求。
 - 不要移除 `package.json -> build.asarUnpack` 中的 `electron/win32-daemon.ps1` 与 `koffi-win32-x64`。
+- 不要剥离 `electron/win32-daemon.ps1`（及含中文的 `.ps1` 脚本）文件头的 **UTF-8 BOM (`0xEF 0xBB 0xBF`)**，否则 Windows PowerShell 5.1 (`powershell.exe`) 会按 ANSI 代码页读取中文字符串导致语法解析失败。
 - 不要格式化 `frontend/assets/*.js` 压缩包，不要使用 `git add -A` 把本地临时文件或凭证带入提交。
 - 不要把飞书密钥、模型密钥、`feishu.env`、`.api_key` 写进仓库或打印进日志/IPC 响应。
 - 不要在 Linux 上声称已验证过粘贴、窗口吸附或全局热键；必须在交付物中写清 Windows 实机手测项。
