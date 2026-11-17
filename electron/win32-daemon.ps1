@@ -136,7 +136,7 @@ function Activate-Hwnd([IntPtr]$h) {
       if ([HyWin]::IsIconic($h)) { [void][HyWin]::ShowWindow($h, 9) }
       [void][HyWin]::BringWindowToTop($h)
       [void][HyWin]::SetForegroundWindow($h)
-      Start-Sleep -Milliseconds 25
+      [System.Threading.Thread]::Sleep(25)
       $fg = [HyWin]::GetForegroundWindow()
       if ($fg -eq $h -or ($fg -ne [IntPtr]::Zero -and ([HyWin]::GetAncestor($h, 3) -eq $fg -or [HyWin]::IsChild($h, $fg)))) {
         $r.ok = $true
@@ -194,7 +194,7 @@ function Wait-PasteResult([IntPtr]$h, [string]$prefix, [bool]$media, [int]$delay
   $budget = [Math]::Max($(if ($media) { 500 } else { 80 }), [int]$delayMs)
   $verify = 'unavailable'
   if ($media) {
-    Start-Sleep -Milliseconds $budget
+    [System.Threading.Thread]::Sleep([int]$budget)
   } else {
     do {
       $verify = Test-PastedText $h $prefix
@@ -202,7 +202,7 @@ function Wait-PasteResult([IntPtr]$h, [string]$prefix, [bool]$media, [int]$delay
       if ($verify -eq 'match' -and ([int]$delayMs -le 80 -or $waitTimer.ElapsedMilliseconds -ge $budget)) { break }
       $remaining = $budget - $waitTimer.ElapsedMilliseconds
       if ($remaining -le 0) { break }
-      Start-Sleep -Milliseconds ([int][Math]::Min(25, $remaining))
+      [System.Threading.Thread]::Sleep([int][Math]::Min(25, $remaining))
     } while ($true)
   }
   return @{ verify = $verify; verifyWaitMs = $waitTimer.ElapsedMilliseconds }
@@ -223,7 +223,7 @@ function Send-KeysTo([IntPtr]$h, $mode, $key, $delayMs, [string]$prefix, [string
   try {
   $prePasteTimer = [System.Diagnostics.Stopwatch]::StartNew()
   # Activation already checked focus. Only a real switch needs a small settle.
-  if ($r.activateAttempts -gt 0) { Start-Sleep -Milliseconds 10 }
+  if ($r.activateAttempts -gt 0) { [System.Threading.Thread]::Sleep(10) }
   $r.prePasteMs = $prePasteTimer.ElapsedMilliseconds
   if (($media -or $focusInput) -and $r.exe -match '^(?i)(jdm_dd_workbench|pop_dd_workbench|jm_dd_workbench)\.exe$' -and -not (Focus-MediaInput $h)) {
     $r.ok = $false; $r.error = 'input-focus-unavailable'; $r.message = '无法确认京东工作台输入框焦点，请先点击聊天输入框再重试，或手动粘贴剪贴板中的媒体'; return $r

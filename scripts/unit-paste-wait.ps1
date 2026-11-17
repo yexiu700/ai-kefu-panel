@@ -15,6 +15,10 @@ function Test-PastedText([IntPtr]$h, [string]$prefix) {
   if ($script:matchAfter -gt 0 -and $script:calls -lt $script:matchAfter) { return 'mismatch' }
   return $script:status
 }
+# Warm up Stopwatch and Thread.Sleep JIT before wall-clock timing assertions on shared CI runners.
+[void](Wait-PasteResult ([IntPtr]1) 'test' $false 0)
+[System.Threading.Thread]::Sleep(1)
+$script:calls = 0
 $r = Wait-PasteResult ([IntPtr]1) 'test' $false 80
 Assert ($r.verify -eq 'match' -and $r.verifyWaitMs -lt 70) 'confirmed default text should return early'
 $script:matchAfter = 3; $script:calls = 0
