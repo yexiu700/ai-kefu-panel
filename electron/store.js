@@ -149,6 +149,24 @@ function settingsPath() {
   return path.join(getDataDir(), 'settings.json')
 }
 
+function preserveCorruptLibrary(srcPath) {
+  try {
+    const dir = path.join(getDataDir(), 'backups')
+    ensureDir(dir)
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    let dest = path.join(dir, `library-corrupt-${stamp}.json.bak`)
+    let seq = 1
+    while (fs.existsSync(dest)) {
+      dest = path.join(dir, `library-corrupt-${stamp}-${seq++}.json.bak`)
+    }
+    fs.copyFileSync(srcPath, dest)
+    return dest
+  } catch (err) {
+    console.error('[store] failed to preserve corrupt library.json', err)
+    return null
+  }
+}
+
 function loadLibrary() {
   const p = libraryPath()
   if (!fs.existsSync(p)) {
@@ -158,11 +176,17 @@ function loadLibrary() {
   }
   try {
     const raw = JSON.parse(fs.readFileSync(p, 'utf8'))
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new Error('library root must be a JSON object')
+    }
     return normalizeLibrary(raw)
   } catch (e) {
-    console.warn('[store] library corrupt, reset', e)
+    const savedAt = preserveCorruptLibrary(p)
+    console.warn('[store] library corrupt, preserved at:', savedAt, e)
     const lib = emptyLibrary()
-    saveLibrary(lib, { skipBackup: true })
+    if (savedAt) {
+      saveLibrary(lib, { skipBackup: true })
+    }
     return lib
   }
 }
