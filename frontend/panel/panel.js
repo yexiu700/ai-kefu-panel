@@ -126,7 +126,7 @@
   let toastTimer = 0
   function toast(msg, kind = '') {
     // Only failures and warnings that require user action belong in the toast.
-    if (kind !== 'err' && kind !== 'warn') return
+    if (!msg || (kind !== 'err' && kind !== 'warn')) return
     const el = $('#toast')
     el.textContent = msg
     el.className = 'toast' + (kind ? ' ' + kind : '')
@@ -367,7 +367,8 @@
         toast(r?.message || '已复制，请手动粘贴', 'warn')
       } else if (r && r.ok === false) {
         if (!r?.hasMedia) await copyText(p.content || '')
-        toast(sendFailureMessage(r), 'err')
+        const msg = sendFailureMessage(r)
+        if (msg) toast(msg, 'err')
       } else {
         ok = true
       }
@@ -500,7 +501,11 @@
     try {
       const r = await invoke('assist_send', { mode: act, text })
       if (r?.unbound || r?.mode === 'clipboard') { await copyText(text); toast(r?.message || '已复制，请手动粘贴', 'warn'); return }
-      if (r && r.ok === false) { await copyText(text); toast(sendFailureMessage(r), 'err'); return }
+      if (r && r.ok === false) {
+        await copyText(text)
+        const msg = sendFailureMessage(r)
+        if (msg) { toast(msg, 'err'); return }
+      }
       aiClose()
     } catch (e) {
       await copyText(text)
@@ -976,7 +981,8 @@
       if (r?.unbound || r?.mode === 'clipboard') {
         toast(r?.message || '已复制，请在聊天窗粘贴（未连接聊天窗）', 'warn')
       } else if (r && r.ok === false) {
-        toast(sendFailureMessage(r), 'err')
+        const msg = sendFailureMessage(r)
+        if (msg) toast(msg, 'err')
       }
     })
 
@@ -991,6 +997,7 @@
 })()
 
 function sendFailureMessage(r) {
+  if (isUnconfirmedPaste(r)) return ''
   const err = String(r?.error || '').trim()
   if (/elevation-mismatch/i.test(`${err} ${r?.message || ''}`)) {
     return '京东工作台以管理员运行，请右键以管理员身份运行 AI客服（elevation-mismatch）'
@@ -1001,5 +1008,18 @@ function sendFailureMessage(r) {
   if (err && r?.message) return `${r.message}（${err}）`
   if (err) return `没能发到聊天窗（${err}），内容已复制，请手动粘贴`
   return r?.message || '没能发到聊天窗，内容已复制，请手动粘贴'
+}
+
+function isUnconfirmedPaste(r) {
+  if (!r || r.mediaErrors?.length) return false
+  const err = String(r.error || '')
+  const msg = String(r.message || '')
+  if (/elevation-mismatch|activation failed/i.test(`${err} ${msg}`)) return false
+  return Boolean(
+    r.sendKeysOk &&
+      (r.verify === 'mismatch' ||
+        /paste verification mismatch|paste.*unconfirmed/i.test(err) ||
+        /粘贴未确认/.test(msg)),
+  )
 }
 

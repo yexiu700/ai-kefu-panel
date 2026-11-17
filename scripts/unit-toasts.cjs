@@ -41,6 +41,24 @@ async function main() {
   assert.equal(notices.length, 0, 'successful copy/fill/send must be quiet, including unverified success')
   assert.equal(used.length, 4, 'successful phrase usage still counted')
   assert.equal(closed.length, 4, 'successful AI use still closes the editor')
+
+  // Issue #2: paste-unconfirmed (verify === 'mismatch' after sendKeysOk) must NOT pop diagnostic toast
+  for (const unconfirmed of [
+    { ok: false, sendKeysOk: true, verify: 'mismatch', error: 'Paste verification mismatch' },
+    { ok: false, sendKeysOk: true, verify: 'mismatch', message: '粘贴未确认成功，内容已保留在剪贴板，请手动粘贴或增加延迟' },
+  ]) {
+    result = unconfirmed
+    const beforeCopies = copies.length
+    const beforeClosed = closed.length
+    await ui.api.usePhrase(phrase, 'fill')
+    await ui.api.usePhrase(phrase, 'send')
+    await ui.api.aiUse('fill')
+    await ui.api.aiUse('send')
+    assert.equal(notices.length, 0, 'paste-unconfirmed diagnostic mismatch must not trigger toast')
+    assert.equal(copies.length - beforeCopies, 4, 'unconfirmed paste keeps text in clipboard as silent safety net')
+    assert.equal(closed.length - beforeClosed, 2, 'AI box still closes after paste keys were sent')
+  }
+
   target = false
   await ui.api.usePhrase(phrase, 'fill'); await ui.api.aiUse('send')
   assert.deepEqual(notices.splice(0).map(n => n.kind), ['warn', 'warn'])
