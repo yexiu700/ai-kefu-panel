@@ -8,7 +8,8 @@ const win32 = require('./win32')
 const { pollPolicy } = require('./snap-policy')
 
 function normalizeExe(exe) {
-  return String(exe || '').trim().toLowerCase().replace(/\.exe$/i, '')
+  const base = String(exe || '').trim().split(/[\\/]/).pop() || ''
+  return base.toLowerCase().replace(/\.exe$/i, '')
 }
 
 function matchesChatApp(exe, chatApps) {
@@ -17,7 +18,7 @@ function matchesChatApp(exe, chatApps) {
   const list = Array.isArray(chatApps) ? chatApps : []
   return list.some((item) => {
     const n = normalizeExe(item)
-    return n && (e === n || e.includes(n) || n.includes(e))
+    return Boolean(n) && e === n
   })
 }
 

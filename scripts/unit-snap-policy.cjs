@@ -65,6 +65,87 @@ async function main() {
   await tick()
   assert.equal(positions, 2, 'runtime hidden state also suppresses follow')
   stop()
-  console.log('unit-snap-policy: PASS (policy + mocked loop; no real windows moved)')
+
+  // Exact process-stem matching (ROADMAP #5): preserve real chat apps, reject substring false positives
+  const { matchesChatApp } = context.module.exports
+  const storeCtx = {
+    module: { exports: {} },
+    require: (id) => (id === 'electron' ? { app: { getPath: () => '/tmp' } } : require(id)),
+    process: { platform: 'win32' },
+    console,
+    structuredClone,
+  }
+  const storeFile = path.resolve('electron/store.js')
+  vm.runInNewContext(fs.readFileSync(storeFile, 'utf8'), storeCtx, { filename: storeFile })
+  const winChatApps = storeCtx.module.exports.defaultSettings().panel.chatApps
+
+  for (const required of ['紫鸟', '紫鸟.exe', '紫鸟浏览器', '紫鸟浏览器.exe', 'JingMai.exe', 'aliworkbench.exe', 'pddworkbench.exe']) {
+    assert.ok(winChatApps.includes(required), `WIN_CHAT_APPS must retain ${required}`)
+  }
+
+  for (const validExe of [
+    '紫鸟.exe',
+    '紫鸟浏览器.exe',
+    'C:\\Program Files\\Ziniao\\紫鸟浏览器.exe',
+    'JingMai.exe',
+    'jingmai',
+    'aliworkbench.exe',
+    'pddworkbench.exe',
+    'jm_dd_workbench.exe',
+    '得物商家客服.exe',
+    '千帆客服工作台.exe',
+    '微信小店助手.exe',
+    'Grok Bot.exe',
+    'qq.exe',
+    'tim.exe',
+  ]) {
+    assert.equal(matchesChatApp(validExe, winChatApps), true, `should match chat app: ${validExe}`)
+  }
+
+  // Stem-only config ('紫鸟' / '紫鸟浏览器') still matches real Windows '.exe' process names
+  assert.equal(matchesChatApp('紫鸟.exe', ['紫鸟']), true)
+  assert.equal(matchesChatApp('紫鸟浏览器.exe', ['紫鸟浏览器']), true)
+
+  for (const nonChatExe of [
+    'qqbrowser.exe',
+    'qqmusic.exe',
+    'runtimebroker.exe',
+    'multimedia.exe',
+    'dd.exe',
+    'jm.exe',
+    'c.exe',
+    'we.exe',
+    'ark.exe',
+    'edge.exe',
+    '',
+    '.exe',
+  ]) {
+    assert.equal(matchesChatApp(nonChatExe, winChatApps), false, `must NOT false-match substring process: ${nonChatExe}`)
+  }
+
+  // Verify snap loop ignores substring false-positive foreground window (qqbrowser.exe) and binds real target (紫鸟浏览器.exe)
+  runtime.target = null
+  runtime.pinned = false
+  runtime.panelVisible = true
+  visible = true
+  settings.panel.docked = true
+  settings.panel.autoBind = true
+  settings.panel.chatApps = ['qq.exe', '紫鸟浏览器']
+  info.exe = 'qqbrowser.exe'
+  now = 6000
+  const stop2 = context.module.exports.startSnapLoop({
+    getRuntime: () => runtime,
+    getPanelWindow: () => panel,
+    setTarget: (target) => { runtime.target = target },
+  })
+  await tick()
+  assert.equal(runtime.target, null, 'qqbrowser.exe must not auto-bind to qq.exe')
+  info.exe = '紫鸟浏览器.exe'
+  now = 7000
+  await tick()
+  assert.equal(runtime.target?.exe, '紫鸟浏览器.exe', '紫鸟浏览器.exe must auto-bind to 紫鸟浏览器')
+  stop2()
+
+  console.log('unit-snap-policy: PASS (policy + exact exe matching + mocked loop; no real windows moved)')
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })
