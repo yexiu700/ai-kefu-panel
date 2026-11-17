@@ -1,4 +1,4 @@
-﻿'use strict'
+'use strict'
 const { clipboard } = require('electron')
 const win32 = require('./win32')
 const { appendSendLog } = require('./send-log')
@@ -69,12 +69,15 @@ async function sendAttempt(text, opts) {
       if (media && result.sendKeysOk) {
         result.verify = 'unavailable'
         result.verifyReason = '目标窗口没有可用的图片/附件回读接口，无法确认接收；媒体保留在剪贴板'
-        if (result.ok) result.message = '已执行媒体粘贴，请核对聊天窗口；媒体仍保留在剪贴板'
       }
       result.sendKeysOk = result.sendKeysOk === true
       if (result.rebound && result.hwnd) opts.onRebound?.(result)
       if (!result.ok) {
-        result.message = failureMessage(result)
+        if (result.sendKeysOk && !result.mediaErrors?.length && (result.verify === 'mismatch' || /paste.*unconfirmed/i.test(String(result.error || '')))) {
+          result.verifyReason = result.verifyReason || '粘贴回读未确认（mismatch），内容已保留在剪贴板'
+        } else {
+          result.message = failureMessage(result)
+        }
       } else if (restoreClipboard && prev !== null) {
         // The daemon completed its post-paste budget. Confirmed text needs no extra grace.
         const restoreStarted = Date.now()
@@ -112,9 +115,6 @@ function failureMessage(r) {
   }
   if (/activation failed/i.test(err)) {
     return '没能切到聊天窗（Target activation failed），内容已复制；可点目标按钮重新「选择聊天窗…」'
-  }
-  if (r.sendKeysOk && (r.verify === 'mismatch' || /paste.*unconfirmed/i.test(err))) {
-    return '粘贴未确认成功，内容已保留在剪贴板，请手动粘贴或增加延迟'
   }
   if (err) return `${r.message || '发送失败，内容已保留在剪贴板，请手动粘贴'}（${err}）`
   return r.message || '发送失败，内容已保留在剪贴板，请手动粘贴'

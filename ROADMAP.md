@@ -136,3 +136,8 @@
 
 - 完成第 8 项：`frontend/panel/panel.js` 常用区（`fq`）在连接聊天窗时的主按钮高亮与整行点击统一跟随 `defaultMode()`（按软件 `appRules` 优先，否则跟全局 `send.mode`），不再强制直接发送；显式点击「填入 / 发送」按钮仍优先采用按钮动作。
 - 验证：扩展 `scripts/unit-send-rule.cjs` 覆盖按软件只填入、全局只填入、按软件覆盖为发送及未连接复制场景，`npm test` 全量通过。
+
+### #12
+
+- 收口 Issue #2（不再弹出「粘贴未确认」调试提示）：当按键已发出但 UIA 回读未能确认（`sendKeysOk && verify === 'mismatch'`）时，不再弹出「粘贴未确认」类调试 Toast，仅在 `send-log` 中记录 `verifyReason` 并保留剪贴板兜底；切窗失败、权限不匹配、文件缺失、未连接聊天窗等真实失败与需手动处理提示保持不变。
+- 验证：扩展 `scripts/unit-toasts.cjs` 与 `scripts/unit-send.cjs` 断言，`npm test` 全量通过。

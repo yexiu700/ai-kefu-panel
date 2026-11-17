@@ -1,4 +1,4 @@
-﻿'use strict'
+'use strict'
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
@@ -32,6 +32,8 @@ async function main() {
   assert.equal((await sender.sendText('phrase', { hwnd: 1 })).ok, false)
   assert.equal(clip, 'phrase')
   assert.equal(logs[0].verify, 'mismatch')
+  assert.equal(logs[0].pasteConfirmed, false)
+  assert.ok(logs[0].verifyReason, 'unconfirmed paste must record verifyReason in send log')
   assert.equal(logs[0].pasteDelayMs, 80)
   response = { ok: true, verify: 'match', sendKeysOk: true }
   clip = 'original'
