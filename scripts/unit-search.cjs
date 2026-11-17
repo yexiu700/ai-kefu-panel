@@ -171,4 +171,175 @@ const plain = (v) => JSON.parse(JSON.stringify(v))
   assert.equal(S.rows[0].p.id, 'p-long')
 }
 
-console.log('unit-search: PASS (title-only, full pinyin start alignment, initials, ranking, full title no-ellipsis)')
+// 6. Debounced search input: coalesces rapid typing & IME composition, flushes synchronously on clear or Enter/navigation
+{
+  const bindStart = panelSrc.indexOf('  function bind()')
+  const bindEnd = panelSrc.indexOf('  // ———————————————————— 启动 ————————————————————')
+  assert.ok(bindStart > 0 && bindEnd > bindStart, 'panel.js bind() slice anchors must exist')
+
+  function makeElem(id = '', tagName = 'DIV') {
+    const listeners = new Map()
+    return {
+      id,
+      tagName,
+      value: '',
+      hidden: true,
+      scrollTop: 99,
+      focused: false,
+      addEventListener(type, fn) {
+        if (!listeners.has(type)) listeners.set(type, [])
+        listeners.get(type).push(fn)
+      },
+      dispatchEvent(ev) {
+        ev.target = ev.target || this
+        ev.preventDefault = ev.preventDefault || (() => { ev.defaultPrevented = true })
+        for (const fn of listeners.get(ev.type) || []) fn(ev)
+      },
+      focus() { this.focused = true },
+      closest() { return null },
+    }
+  }
+
+  const els = {
+    '#q': makeElem('q', 'INPUT'),
+    '#clearQ': makeElem('clearQ', 'BUTTON'),
+    '#list': makeElem('list', 'DIV'),
+    '#pop': makeElem('pop', 'DIV'),
+    '#scopeSeg': makeElem('scopeSeg', 'DIV'),
+    '#favFilter': makeElem('favFilter', 'BUTTON'),
+    '#askBtn': makeElem('askBtn', 'BUTTON'),
+    '#targetBtn': makeElem('targetBtn', 'BUTTON'),
+    '#menuBtn': makeElem('menuBtn', 'BUTTON'),
+    '#hideBtn': makeElem('hideBtn', 'BUTTON'),
+    '#ai': makeElem('ai', 'DIV'),
+  }
+  const docEl = makeElem('document', 'DOCUMENT')
+  docEl.body = makeElem('body', 'BODY')
+  const winEl = makeElem('window', 'WINDOW')
+
+  let nextTimerId = 1
+  const timers = new Map()
+  let renderCalls = 0
+  const usedPhrases = []
+
+  const bindState = {
+    q: '',
+    scope: 'company',
+    favOnly: false,
+    collapsed: new Set(),
+    fqCollapsed: false,
+    assist: { phase: 'idle' },
+    rows: [{ p: { id: 'stale-row', title: '旧行' } }],
+    active: 0,
+  }
+
+  const bindSandbox = {
+    S: bindState,
+    $: (sel) => els[sel],
+    document: docEl,
+    window: winEl,
+    Event: class FakeEvent { constructor(type, init = {}) { Object.assign(this, init, { type }) } },
+    LS: { set() {} },
+    mql: {},
+    setTimeout(fn, ms) {
+      const id = nextTimerId++
+      timers.set(id, { fn, ms })
+      return id
+    },
+    clearTimeout(id) {
+      timers.delete(id)
+    },
+    renderList() {
+      renderCalls++
+      bindState.rows = bindState.q
+        ? [{ p: { id: `hit:${bindState.q.trim()}`, title: bindState.q.trim() } }]
+        : [{ p: { id: 'all-default', title: '默认首行' } }]
+      if (bindState.q.trim() && bindState.active < 0) bindState.active = 0
+    },
+    renderScope() {},
+    paintActive() {},
+    closePop() {},
+    aiClose() {},
+    hasTarget: () => true,
+    defaultMode: () => 'send',
+    usePhrase: (p, act) => usedPhrases.push({ id: p.id, act }),
+    invoke() {},
+    addSamples() {},
+    openFeishuChooser() {},
+    toggleFav() {},
+    askAi() {},
+    openTargetMenu() {},
+    openMainMenu() {},
+    aiOptions: () => [],
+    renderAi() {},
+    aiCollect() {},
+    aiUse() {},
+    applyTheme() {},
+  }
+
+  bindSandbox.globalThis = bindSandbox
+  vm.runInNewContext(
+    panelSrc.slice(bindStart, bindEnd) + '\nglobalThis.runBind = bind;',
+    bindSandbox,
+    { filename: 'panel-bind-slice.js' },
+  )
+  bindSandbox.runBind()
+
+  function flushAllTimers() {
+    for (const [id, entry] of [...timers.entries()]) {
+      timers.delete(id)
+      entry.fn()
+    }
+  }
+
+  const q = els['#q']
+
+  // 6a. Rapid typing coalesces 6 input events into 1 renderList()
+  for (const partial of ['t', 'tu', 'tui', 'tuih', 'tuihu', 'tuihuo']) {
+    q.value = partial
+    q.dispatchEvent(new bindSandbox.Event('input'))
+    assert.equal(els['#clearQ'].hidden, false, 'clear button updates immediately on first keystroke')
+  }
+  assert.equal(renderCalls, 0, 'rapid keystrokes must not synchronously rebuild full list on every char')
+  assert.equal(timers.size, 1, 'only one pending debounce timer scheduled')
+
+  flushAllTimers()
+  assert.equal(renderCalls, 1, 'debounced input renders list exactly once after typing pause')
+  assert.equal(bindState.q, 'tuihuo')
+  assert.equal(els['#list'].scrollTop, 0)
+
+  // 6b. IME composition skips intermediate renders until compositionend
+  renderCalls = 0
+  q.dispatchEvent(new bindSandbox.Event('compositionstart'))
+  q.value = 'shun'
+  q.dispatchEvent(new bindSandbox.Event('input', { isComposing: true }))
+  q.value = 'shunfeng'
+  q.dispatchEvent(new bindSandbox.Event('input', { isComposing: true }))
+  flushAllTimers()
+  assert.equal(renderCalls, 0, 'IME composition intermediate strokes must not trigger full list rebuild')
+  q.value = '顺丰'
+  q.dispatchEvent(new bindSandbox.Event('compositionend'))
+  flushAllTimers()
+  assert.equal(renderCalls, 1, 'compositionend flushes search render once')
+  assert.equal(bindState.q, '顺丰')
+
+  // 6c. Fast type + immediate Enter BEFORE timer fires flushes synchronously (never sends stale row!)
+  renderCalls = 0
+  q.value = 'yfx'
+  q.dispatchEvent(new bindSandbox.Event('input'))
+  assert.equal(renderCalls, 0)
+  docEl.dispatchEvent(new bindSandbox.Event('keydown', { key: 'Enter', target: q }))
+  assert.equal(renderCalls, 1, 'pressing Enter flushes pending search immediately')
+  assert.deepEqual(usedPhrases, [{ id: 'hit:yfx', act: 'send' }], 'Enter must send freshly matched row, never stale row')
+  assert.equal(timers.size, 0, 'flushing on Enter cancels pending debounce timer')
+
+  // 6d. Clearing search (#clearQ) updates immediately without waiting for debounce
+  renderCalls = 0
+  els['#clearQ'].dispatchEvent(new bindSandbox.Event('click'))
+  assert.equal(q.value, '')
+  assert.equal(els['#clearQ'].hidden, true)
+  assert.equal(renderCalls, 1, 'clearing query renders full list immediately with zero lag')
+  assert.equal(timers.size, 0)
+}
+
+console.log('unit-search: PASS (title-only, full pinyin start alignment, initials, ranking, full title, input debounce & sync flush)')

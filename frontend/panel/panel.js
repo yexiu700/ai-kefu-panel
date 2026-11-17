@@ -691,14 +691,46 @@
   // ———————————————————— 事件绑定 ————————————————————
   function bind() {
     const q = $('#q')
-    q.addEventListener('input', () => {
+    const SEARCH_DEBOUNCE_MS = 90
+    let searchTimer = 0
+    let searchDirty = false
+    let composing = false
+
+    function cancelSearchTimer() {
+      if (searchTimer) { clearTimeout(searchTimer); searchTimer = 0 }
+    }
+
+    function flushSearch() {
+      cancelSearchTimer()
+      if (!searchDirty && S.q === q.value) return
+      searchDirty = false
       S.q = q.value
       $('#clearQ').hidden = !S.q
       S.active = S.q.trim() ? 0 : -1
       renderList()
       $('#list').scrollTop = 0
+    }
+
+    function scheduleSearch() {
+      S.q = q.value
+      $('#clearQ').hidden = !S.q
+      searchDirty = true
+      cancelSearchTimer()
+      if (!S.q) {
+        flushSearch()
+        return
+      }
+      if (composing) return
+      searchTimer = setTimeout(flushSearch, SEARCH_DEBOUNCE_MS)
+    }
+
+    q.addEventListener('compositionstart', () => { composing = true; cancelSearchTimer() })
+    q.addEventListener('compositionend', () => { composing = false; scheduleSearch() })
+    q.addEventListener('input', (e) => {
+      if (e?.isComposing) composing = true
+      scheduleSearch()
     })
-    $('#clearQ').addEventListener('click', () => { q.value = ''; q.dispatchEvent(new Event('input')); q.focus() })
+    $('#clearQ').addEventListener('click', () => { q.value = ''; composing = false; scheduleSearch(); q.focus() })
 
     document.addEventListener('keydown', (e) => {
       if (e.isComposing || e.keyCode === 229) return
@@ -706,17 +738,19 @@
       if (e.key === 'Escape') {
         if (!$('#pop').hidden) { closePop(); return }
         if (inAi) return
-        if (S.q) { q.value = ''; q.dispatchEvent(new Event('input')); return }
+        if (S.q || q.value) { q.value = ''; composing = false; scheduleSearch(); return }
         if (S.assist.phase !== 'idle') { aiClose(); return }
         return
       }
       if (inAi) return
       if (e.altKey && /^[1-9]$/.test(e.key)) {
+        flushSearch()
         const r = S.rows[Number(e.key) - 1]
         if (r) { e.preventDefault(); usePhrase(r.p, hasTarget() ? defaultMode() : 'copy') }
         return
       }
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        flushSearch()
         if (!S.rows.length) return
         e.preventDefault()
         const d = e.key === 'ArrowDown' ? 1 : -1
@@ -725,6 +759,7 @@
         return
       }
       if (e.key === 'Enter' && (e.target === q || e.target === document.body || e.target.id === 'list')) {
+        flushSearch()
         const r = S.rows[S.active]
         if (!r) return
         e.preventDefault()
@@ -786,6 +821,7 @@
     $('#scopeSeg').addEventListener('click', (e) => {
       const b = e.target.closest('[data-scope]')
       if (!b || b.dataset.scope === S.scope) return
+      cancelSearchTimer(); searchDirty = false; S.q = q.value
       S.scope = b.dataset.scope
       LS.set('aikefu.scope', S.scope)
       S.active = S.q.trim() ? 0 : -1
@@ -794,6 +830,7 @@
     })
 
     $('#favFilter').addEventListener('click', () => {
+      cancelSearchTimer(); searchDirty = false; S.q = q.value
       S.favOnly = !S.favOnly
       LS.set('aikefu.favOnly', S.favOnly)
       renderScope(); renderList()
