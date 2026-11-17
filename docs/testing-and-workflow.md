@@ -21,7 +21,7 @@ npm test -- send         # 按关键字过滤只跑相关单测（如 send / fei
 | `scripts/unit-send-media.cjs` | 混合话术「先文字后媒体」、`CF_HDROP` 不被旧文本恢复覆盖、未绑定/部分缺失文件容错、重绑句柄传递、面板 `usePhrase` 不覆盖媒体剪贴板 |
 | `scripts/unit-toasts.cjs` | 0.2.32 静默策略：成功填入/发送/复制/同步不弹 Toast；保留 `err`/`warn`、兜底复制与管理页集中错误提示 |
 | `scripts/unit-store-cache.cjs` | `store.js` 设置缓存命中不读盘、外部文件变更自动感知、返回深拷贝防篡改、`docked`/`floatHeight` 一次性迁移 |
-| `scripts/unit-snap-policy.cjs` | `snap-policy.js` 与 `snap.js`：可见吸附 280ms、隐藏/浮动降频至 1000ms 并暂停矩形刷新与移动、`autoBind=false` 零快照 |
+| `scripts/unit-snap-policy.cjs` | `snap-policy.js` 与 `snap.js`：可见吸附 280ms、隐藏/浮动降频至 1000ms、`autoBind=false` 零快照、`matchesChatApp` 全名精确匹配（保留紫鸟/京麦并拒绝子串误跟） |
 | `scripts/unit-ui-protocol.cjs` | `ui-protocol.js` 的 `aikefu://ui/*` 路径映射、MIME、防目录穿越（`%2e%2e` / `\` / `:` / `\0`）、`main.js` 特权注册顺序 |
 | `scripts/unit-pinyin-lazy.cjs` | `panel.js` 首屏双 `rAF` + `idle` 延迟加载 `pinyin-pro.js`、未加载前纯文本可用、加载后刷新缓存与重过滤、失败降级 |
 | `scripts/unit-manager-lazy.cjs` | `manager.html` 移除 `TemplatesPage` 预加载、保留 `GuideSpotlight`、Vite 动态加载等待 CSS 就绪防闪烁 |

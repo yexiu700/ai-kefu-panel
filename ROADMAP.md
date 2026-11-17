@@ -36,7 +36,7 @@
 
 - **为什么：** `matchesChatApp` 用了双向 `includes`。短进程名可能被当成聊天软件，面板会跟错窗口。列表里的 `紫鸟`、`紫鸟浏览器`、`JingMai.exe` 必须继续能跟上。
 - **大小：** 小，但要对照真实进程名，不能只靠猜测把中文名删掉。
-- **状态：** 未做。
+- **状态：** 已完成（迭代 #10）。对照真实进程名 `紫鸟.exe`、`紫鸟浏览器.exe`、`JingMai.exe`，`electron/snap.js` 的 `matchesChatApp` 收紧为去路径、去 `.exe` 后忽略大小写的全名精确匹配（保留 `WIN_CHAT_APPS` 中 `紫鸟`、`紫鸟.exe`、`紫鸟浏览器`、`紫鸟浏览器.exe`、`JingMai.exe`），彻底消除 `qq` 误匹配 `qqbrowser`、`tim` 误匹配 `runtimebroker` 及短进程名反向子串误跟问题。
 
 ### 6. 给搜索补单测
 
@@ -126,3 +126,8 @@
 
 - 完成第 9 项：不搬动已有日志或话术目录，在面板主菜单并列展示「打开发送日志（`AI客服\logs`）」与「打开话术与设置目录（`huiyou-original-shell`）」及 `%APPDATA%` 完整路径提示；`get_app_info` 增补 `logDir` 字段，`open_data_dir` 与 `open_send_logs` 统一确保目录存在并在 `shell.openPath` 失败时抛错提示（成功保持静默）。
 - 验证：新增 `scripts/unit-menu-paths.cjs` 并纳入 `npm test`（48 个文件语法检查 + 17 个单测套件）全量通过。
+
+### #10
+
+- 完成第 5 项：确认真实进程名 `紫鸟.exe`、`紫鸟浏览器.exe` 后，将 `electron/snap.js` 的 `matchesChatApp` 收紧为提取进程文件名、去掉 `.exe` 后忽略大小写的全名相等匹配，不再做双向 `includes`；保留 `WIN_CHAT_APPS` 全部默认项不动。
+- 验证：扩展 `scripts/unit-snap-policy.cjs` 覆盖 `WIN_CHAT_APPS` 真实进程匹配与子串误匹配拦截，`npm test` 全量通过。
