@@ -22,7 +22,7 @@
 
 - **为什么：** `loadLibrary()` 在 JSON 解析失败时用空库覆盖原文件，而且 `skipBackup: true`，客服的话术库会直接没掉。
 - **大小：** 小。解析失败时把原文件拷进 `backups`，再决定要不要给一份空库；不要静默丢掉坏文件。
-- **状态：** 未做。
+- **状态：** 已完成（迭代 #4）。`electron/store.js` 的 `loadLibrary()` 在 JSON 解析失败或非对象根结构时先将原文件完整备份至 `backups/library-corrupt-<timestamp>.json.bak` 再初始化空库；备份失败时不覆盖原文件。
 
 ### 4. 话术自己的全局热键没有注册
 
@@ -60,7 +60,7 @@
 
 - **为什么：** 话术在 `huiyou-original-shell` 下面，日志在 `%APPDATA%\AI客服\logs`。面板里的「打开发送日志」能打开，但排障时两个目录容易找错。
 - **大小：** 小。可以在现有入口上把路径说清楚。不要搬已有日志，也不要改话术目录。
-- **状态：** 未做。
+- **状态：** 已完成（迭代 #9）。不改动任何磁盘目录位置：面板主菜单并列提供「打开发送日志（`AI客服\logs`）」与「打开话术与设置目录（`huiyou-original-shell`）」及完整 `%APPDATA%` 悬浮提示；`get_app_info` 同步暴露 `logDir` 与 `dataDir`，`open_data_dir` 补齐目录创建与 `shell.openPath` 失败报错透传。
 
 ### 10. Win32 daemon 的应答按请求对应
 
@@ -121,3 +121,8 @@
 
 - 完成第 10 项：`electron/win32.js` 请求附带自增 `id`，`electron/win32-daemon.ps1` 的 `Write-Result` 自动将 `$script:currentReqId` 写回应答 JSON；`win32.js` 按 `id` 匹配 `pending` 请求并隔离迟到超时包与重复行，未改动任何粘贴或发送键行为。
 - 验证：新增跨平台隔离单测 `scripts/unit-win32-rpc.cjs` 并在 Windows AST 单测 `scripts/unit-paste-wait.ps1` 增加 `Write-Result` 请求 ID 回传断言，`npm test` 全量通过。
+
+### #9
+
+- 完成第 9 项：不搬动已有日志或话术目录，在面板主菜单并列展示「打开发送日志（`AI客服\logs`）」与「打开话术与设置目录（`huiyou-original-shell`）」及 `%APPDATA%` 完整路径提示；`get_app_info` 增补 `logDir` 字段，`open_data_dir` 与 `open_send_logs` 统一确保目录存在并在 `shell.openPath` 失败时抛错提示（成功保持静默）。
+- 验证：新增 `scripts/unit-menu-paths.cjs` 并纳入 `npm test`（48 个文件语法检查 + 17 个单测套件）全量通过。

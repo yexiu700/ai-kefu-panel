@@ -32,6 +32,7 @@ const NODE_UNIT_SUITES = [
   'scripts/unit-media.cjs',
   'scripts/unit-hotkeys.cjs',
   'scripts/unit-win32-rpc.cjs',
+  'scripts/unit-menu-paths.cjs',
 ]
 
 const WIN_POWERSHELL_SUITES = [

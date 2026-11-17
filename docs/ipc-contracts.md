@@ -48,10 +48,11 @@
 | `get_panel_state` | `{}` | `{ visible, side, width, docked, alwaysOnTop }` | 面板状态快照 |
 | `show_panel` / `hide_panel` | `{}` | `true` | 控制面板显隐并广播 `panel-state` |
 | `open_manager` / `open_settings` | `{ tab? }` | `true` | 打开或聚焦管理窗并可切到指定 `tab`（`library` / `settings` 等） |
-| `open_send_logs` | `{}` | `true` | 打开 `%APPDATA%\AI客服\logs` |
-| `open_data_dir` | `{}` | `true` | 打开双层 `huiyou-original-shell` 数据目录 |
+| `get_app_info` | `{}` | `{ name, version, dataDir, logDir, platform }` | 同时返回话术目录 `dataDir` 与发送日志目录 `logDir`（两个目录分开存放） |
+| `open_send_logs` | `{}` | `true` | 确保 `%APPDATA%\AI客服\logs` 存在并用系统文件管理器打开；失败时抛错 |
+| `open_data_dir` | `{}` | `true` | 确保双层 `huiyou-original-shell` 数据目录存在并用系统文件管理器打开；失败时抛错 |
 | `suspend_hotkeys` | `{ suspended: boolean }` | `true` | 录制快捷键时挂起全局热键触发 |
-| `get_hotkey_failures` | `{}` | `string[]` | 必须返回数组 |
+| `get_hotkey_failures` | `{}` | `Array<{ hotkey: string, reason: string }>` | 必须返回数组 |
 
 ### 2.3 媒体与文件导入导出
 

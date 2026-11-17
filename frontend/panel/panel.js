@@ -641,7 +641,8 @@
         : '') +
       item('paste-delay', '粘贴延迟', { sub: pasteDelay + ' ms（点击切换）' }) +
       item('restore-clipboard', '恢复剪贴板', { check: s.send?.restoreClipboard !== false }) +
-      item('send-logs', '打开发送日志') +
+      item('send-logs', '打开发送日志', { sub: 'AI客服\\logs', extra: 'title="%APPDATA%\\AI客服\\logs（与话术目录分开存放）"' }) +
+      item('data-dir', '打开话术与设置目录', { sub: 'huiyou-original-shell', extra: 'title="%APPDATA%\\huiyou-original-shell\\huiyou-original-shell"' }) +
       `<div class="sep"></div>` +
       item('top', '窗口置顶', { check: s.panel?.alwaysOnTop !== false }) +
       item('theme', '外观', { sub: { auto: '跟随系统', light: '浅色', dark: '深色' }[theme] || '跟随系统' }) +
@@ -662,6 +663,7 @@
       else if (k === 'paste-delay') await patchSettings({ send: { pasteDelayMs: pasteDelays[(pasteDelays.indexOf(pasteDelay) + 1) % pasteDelays.length] } })
       else if (k === 'restore-clipboard') await patchSettings({ send: { restoreClipboard: !(s.send?.restoreClipboard !== false) } })
       else if (k === 'send-logs') { try { await invoke('open_send_logs') } catch (e) { toast('打开日志失败：' + (e?.message || e), 'err') } }
+      else if (k === 'data-dir') { try { await invoke('open_data_dir') } catch (e) { toast('打开目录失败：' + (e?.message || e), 'err') } }
       else if (k === 'top') await patchSettings({ panel: { alwaysOnTop: !(s.panel?.alwaysOnTop !== false) } })
       else if (k === 'theme') await patchSettings({ theme: { auto: 'light', light: 'dark', dark: 'auto' }[theme] || 'light' })
       else if (k === 'quit') invoke('quit_app')
