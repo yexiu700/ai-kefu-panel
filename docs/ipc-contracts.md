@@ -94,6 +94,7 @@
 | `panel-state` | 面板显隐切换 / 就绪 | `{ visible, side, width, docked, alwaysOnTop }` | 管理页与面板同步状态 |
 | `focus-search` | 全局热键聚焦搜索（默认 `Ctrl+Alt+F`） | `{}` | 面板聚焦并全选 `#q` 搜索框 |
 | `trigger-assist` | 全局热键问 AI（默认 `Ctrl+Alt+J`） | `{}` | 面板展示并执行 `askAi()`（绝不在热键回调直接发送消息） |
+| `phrase-hotkey-triggered` | 单条话术全局热键触发完成 | `{ phraseId: string, result: SendResult }` | 面板更新本地 `usage` 计数并在未连接/失败时显示 `warn`/`err` 提示（成功保持静默） |
 | `hotkey-failures` | 全局热键重注册完成 | `Array<{ hotkey: string, reason: string }>` | 管理页更新冲突占用提示 |
 | `assist-state` | 问 AI 状态流转 | `AssistState` | 面板渲染运行中 / 建议编辑 / 报错卡片 |
 | `send-state` | `send_phrase` 开始与结束 | `{ sending: boolean, phraseId: string \| null }` | 状态指示 |

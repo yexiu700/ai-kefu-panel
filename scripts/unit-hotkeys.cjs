@@ -71,10 +71,13 @@ async function main() {
   assert.equal(acceleratorFromSetting(''), null)
   assert.equal(acceleratorFromSetting(null), null)
 
+  let sentPayloads = []
   let handlersRef = null
   const hotkeys = createHotkeyManager({
     globalShortcut: fakeShortcut,
     getSettings: () => store.loadSettings(),
+    getLibrary: () => store.loadLibrary(),
+    getTargetExe: () => handlersRef?.runtime.target?.exe || null,
     isSuspended: () => !!handlersRef?.runtime.hotkeysSuspended,
     onTogglePanel: () => { toggled++ },
     onFocusSearch: () => { searched++ },
@@ -82,17 +85,27 @@ async function main() {
       assisted++
       events.push(['trigger-assist', {}])
     },
+    onTriggerPhrase: (phraseId) => handlersRef?.triggerPhraseHotkey?.(phraseId, ctxRef),
     onFailuresChanged: (list) => {
       events.push(['hotkey-failures', list])
     },
   })
 
+  const sentWindows = []
+  const fakeWin = {
+    webContents: {
+      send(ch, data) {
+        if (ch === 'tauri-event') events.push([data.event, data.payload])
+        sentWindows.push([ch, data])
+      },
+    },
+  }
   const electronMock = {
     app: { getPath: () => tempDir },
     dialog: {},
     shell: {},
     clipboard: {},
-    BrowserWindow: { getAllWindows: () => [] },
+    BrowserWindow: { getAllWindows: () => [fakeWin] },
     nativeImage: {},
   }
   const handlers = loadModule('electron/handlers.js', {
@@ -100,11 +113,15 @@ async function main() {
     './store': store,
     './media': {},
     './send': {
-      sendPhrase: async () => { sendCount++; return { ok: true } },
+      sendPhrase: async (phrase, opts) => {
+        sendCount++
+        sentPayloads.push({ phrase, opts })
+        return { ok: true, unbound: !opts.hwnd }
+      },
       sendText: async () => { sendCount++; return { ok: true } },
     },
     './send-log': {},
-    './win32': {},
+    './win32': { isWin: () => false },
     './assist': { getAssistState: () => ({ phase: 'idle' }) },
     './feishu-sync': {},
     './feishu-config': {},
@@ -117,8 +134,10 @@ async function main() {
     setPanelVisible: () => {},
     broadcast: (ev, payload) => events.push([ev, payload]),
     syncHotkeys: () => hotkeys.sync(),
+    syncHotkeysForTarget: (exe) => hotkeys.syncForTargetExe(exe),
     getHotkeyFailures: () => hotkeys.getFailures(),
   }
+  var ctxRef = ctx
 
   assert.deepEqual(hotkeys.sync(), [])
   assert.deepEqual([...registered.keys()], ['Control+Alt+K', 'Control+Alt+F', 'Control+Alt+J'])
@@ -167,11 +186,102 @@ async function main() {
   assert.equal(dupRes.hotkeyFailures[0].hotkey, 'Ctrl+Alt+K')
   assert.match(dupRes.hotkeyFailures[0].reason, /冲突|重复|相同/)
 
-  // 3. Verify panel.js wires trigger-assist event to askAi()
+  // Reset global hotkeys cleanly before testing phrase hotkeys
+  await handlers.handleCommand('update_settings', {
+    patch: {
+      hotkeys: { togglePanel: 'Ctrl+Alt+K', focusSearch: 'Ctrl+Alt+F', assist: 'Ctrl+Alt+J' },
+      send: { mode: 'send', key: 'enter', appRules: [{ exe: 'JingMai.exe', mode: 'fill', key: 'ctrl_enter' }] },
+    },
+  }, ctx)
+
+  // 3. Phrase global hotkeys: registration, usability check, conflict priority, OS occupation, and app-scoped groups
+  const backupBeforePhrases = await handlers.handleCommand('backup_now', {}, ctx)
+  const saveRes = await handlers.handleCommand('save_library', {
+    origin: 'manager',
+    library: {
+      version: 2,
+      groups: [
+        {
+          id: 'g-common',
+          name: '通用',
+          scope: 'company',
+          apps: [],
+          phrases: [
+            { id: 'p-welcome', title: '欢迎语', content: '您好，请问有什么可以帮您？', hotkey: 'Alt+1' },
+            { id: 'p-empty', title: '空内容话术', content: '   ', images: [], files: [], hotkey: 'Alt+2' },
+            { id: 'p-dup-global', title: '撞全局键', content: '测试全局冲突', hotkey: 'Ctrl+Alt+K' },
+            { id: 'p-dup-phrase', title: '撞欢迎语', content: '第二条抢 Alt+1', hotkey: 'Alt+1' },
+            { id: 'p-occupied', title: '被系统占用', content: '测试系统占用', hotkey: 'Ctrl+Alt+M' },
+          ],
+        },
+        {
+          id: 'g-jingmai',
+          name: '京麦专属组',
+          scope: 'private',
+          apps: ['JingMai.exe'],
+          phrases: [
+            { id: 'p-jm', title: '京麦催付', content: '亲，京麦订单记得付款哦', hotkey: 'Alt+6' },
+          ],
+        },
+      ],
+      stickers: [],
+    },
+  }, ctx)
+
+  assert.equal(registered.has('Alt+1'), true, 'usable phrase hotkey must be registered')
+  assert.equal(registered.has('Alt+2'), false, 'empty phrase without text/media must not register hotkey')
+  assert.equal(registered.has('Alt+6'), true, 'app-scoped phrase registers when no target exe restricts it yet')
+  assert.equal(saveRes.hotkeyFailures.length, 3, 'global conflict + phrase duplicate + OS occupied all reported')
+  assert.ok(saveRes.hotkeyFailures.some((f) => f.hotkey === 'Ctrl+Alt+K' && /呼出\/隐藏面板/.test(f.reason)))
+  assert.ok(saveRes.hotkeyFailures.some((f) => f.hotkey === 'Alt+1' && /欢迎语/.test(f.reason)))
+  assert.ok(saveRes.hotkeyFailures.some((f) => f.hotkey === 'Ctrl+Alt+M' && /占用/.test(f.reason)))
+
+  // Switching target to WeChat unregisters JingMai-only Alt+6 without dropping common Alt+1
+  handlers.setTarget({ hwnd: 101, exe: 'WeChat.exe', title: '微信', bound: false }, { emit: true, onTargetExeChanged: (exe) => hotkeys.syncForTargetExe(exe) })
+  assert.equal(registered.has('Alt+1'), true)
+  assert.equal(registered.has('Alt+6'), false, 'JingMai-only hotkey must not hijack keystrokes while WeChat is active')
+
+  const unregSnapshot = unregisterCount
+  // Same-exe window move tick must NOT churn globalShortcut registrations
+  handlers.setTarget({ hwnd: 101, exe: 'WeChat.exe', title: '微信 (移动窗口)', bound: false }, { emit: false, onTargetExeChanged: (exe) => hotkeys.syncForTargetExe(exe) })
+  assert.equal(unregisterCount, unregSnapshot, 'same-exe snap ticks must not unregister/re-register hotkeys')
+
+  // Switching target to JingMai activates Alt+6 and sends using JingMai's per-app rule (fill + ctrl_enter)
+  handlers.setTarget({ hwnd: 202, exe: 'JingMai.exe', title: '京麦工作台', bound: true }, { emit: true, onTargetExeChanged: (exe) => hotkeys.syncForTargetExe(exe) })
+  assert.equal(registered.has('Alt+6'), true)
+
+  const unregBeforeTrigger = unregisterCount
+  await registered.get('Alt+6')()
+  assert.equal(sentPayloads.length, 1)
+  assert.equal(sentPayloads[0].phrase.id, 'p-jm')
+  assert.equal(sentPayloads[0].opts.mode, 'fill', 'must respect JingMai per-app fill rule')
+  assert.equal(sentPayloads[0].opts.key, 'ctrl_enter', 'must respect JingMai per-app ctrl_enter rule')
+  assert.equal(sentPayloads[0].opts.hwnd, 202)
+  assert.equal(unregisterCount, unregBeforeTrigger, 'usage bump from hotkey send must not churn globalShortcut registrations')
+
+  const reloadedLib = store.loadLibrary()
+  const jmPhrase = reloadedLib.groups.find((g) => g.id === 'g-jingmai').phrases[0]
+  assert.equal(jmPhrase.useCount, 1, 'hotkey trigger must increment phrase useCount')
+  assert.ok(Number.isFinite(jmPhrase.lastUsedAt), 'hotkey trigger must record lastUsedAt')
+  assert.ok(events.some(([ev, payload]) => ev === 'phrase-hotkey-triggered' && payload.phraseId === 'p-jm'))
+
+  // panel-usage save_library must NOT churn globalShortcut registrations
+  const unregBeforeUsageSave = unregisterCount
+  await handlers.handleCommand('save_library', { library: reloadedLib, origin: 'panel-usage' }, ctx)
+  assert.equal(unregisterCount, unregBeforeUsageSave, 'panel-usage saves must skip hotkey re-registration')
+
+  // restore_backup re-syncs phrase hotkeys
+  await handlers.handleCommand('restore_backup', { id: backupBeforePhrases.id }, ctx)
+  assert.equal(registered.has('Alt+1'), false, 'restoring pre-phrase backup must unregister removed phrase hotkeys')
+  assert.equal(registered.has('Alt+6'), false)
+
+  // 4. Verify panel.js wires trigger-assist and phrase-hotkey-triggered events
   const panelSource = fs.readFileSync('frontend/panel/panel.js', 'utf8')
   assert.match(panelSource, /listen\(['"]trigger-assist['"],\s*\(\)\s*=>\s*\{\s*askAi\(\)\s*\}\)/)
+  assert.match(panelSource, /listen\(['"]phrase-hotkey-triggered['"]/)
 
-  console.log('unit-hotkeys: PASS (assist hotkey, dynamic rebind, recorder suspend sequence, clearable hotkeys, failure reporting)')
+  fs.rmSync(tempDir, { recursive: true, force: true })
+  console.log('unit-hotkeys: PASS (assist + phrase hotkeys, dynamic rebind, conflicts, app-scoped groups, per-app send rules)')
 }
 
 main().catch((err) => {

@@ -6,7 +6,7 @@ const {
   app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, nativeImage, protocol, net,
 } = require('electron')
 const store = require('./store')
-const { handleCommand, runtime, emitAll, getPanelState, setTarget } = require('./handlers')
+const { handleCommand, runtime, emitAll, getPanelState, setTarget, triggerPhraseHotkey } = require('./handlers')
 const win32 = require('./win32')
 const { startSnapLoop } = require('./snap')
 const { createUiHandler } = require('./ui-protocol')
@@ -143,9 +143,13 @@ function emitToPanel(event, payload = {}) {
   }
 }
 
+let ipcCtx = null
+
 const hotkeyManager = createHotkeyManager({
   globalShortcut,
   getSettings: () => store.loadSettings(),
+  getLibrary: () => store.loadLibrary(),
+  getTargetExe: () => runtime.target?.exe || null,
   isSuspended: () => !!runtime.hotkeysSuspended,
   onTogglePanel: () => {
     const vis = !(panelWindow && !panelWindow.isDestroyed() && panelWindow.isVisible())
@@ -154,6 +158,9 @@ const hotkeyManager = createHotkeyManager({
   },
   onFocusSearch: () => emitToPanel('focus-search', {}),
   onAssist: () => emitToPanel('trigger-assist', {}),
+  onTriggerPhrase: (phraseId) => {
+    triggerPhraseHotkey(phraseId, ipcCtx)
+  },
   onFailuresChanged: (list) => emitAll('hotkey-failures', list),
 })
 
@@ -191,8 +198,10 @@ function wireIpc() {
     setPanelVisible,
     broadcast: emitAll,
     syncHotkeys: () => hotkeyManager.sync(),
+    syncHotkeysForTarget: (exe) => hotkeyManager.syncForTargetExe(exe),
     getHotkeyFailures: () => hotkeyManager.getFailures(),
   }
+  ipcCtx = ctx
 
   ipcMain.handle('tauri-invoke', async (_e, payload) => {
     const { cmd, args } = payload || {}
@@ -341,7 +350,7 @@ if (!gotLock) {
     createTray()
     registerHotkeys()
     if (store.loadSettings().feishuSyncOnLaunch) {
-      handleCommand('sync_company_from_feishu').catch(() => console.warn('[feishu] 启动同步失败'))
+      handleCommand('sync_company_from_feishu', {}, ipcCtx).catch(() => console.warn('[feishu] 启动同步失败'))
     }
 
     if (win32.isWin()) {
@@ -358,6 +367,7 @@ if (!gotLock) {
           else if (!prev || prev.hwnd !== t?.hwnd || prev.title !== t?.title || prev.bound !== t?.bound) {
             emitAll('target-changed', runtime.target)
           }
+          hotkeyManager.syncForTargetExe(runtime.target?.exe || null)
         },
         emitTarget: (t) => emitAll('target-changed', t),
       })
