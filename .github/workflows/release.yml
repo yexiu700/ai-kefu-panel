@@ -1,0 +1,102 @@
+name: Release Windows Installer
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to build and upload installer for (e.g. v0.2.35)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build & Attach Windows x64 Installer
+    runs-on: windows-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - name: Resolve release tag
+        id: meta
+        shell: pwsh
+        run: |
+          $tag = "${{ inputs.tag }}"
+          if (-not $tag) {
+            $tag = $env:GITHUB_REF_NAME
+          }
+          if ($tag -notmatch '^v\d+\.\d+\.\d+') {
+            throw "Invalid release tag: $tag"
+          }
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.meta.outputs.tag }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Verify tag matches package.json version
+        shell: pwsh
+        run: |
+          $pkgVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $expectedTag = "v$pkgVersion"
+          if ("${{ steps.meta.outputs.tag }}" -ne $expectedTag) {
+            throw "Tag ${{ steps.meta.outputs.tag }} does not match package.json version ($expectedTag)"
+          }
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run full Windows unit & PowerShell AST tests
+        run: npm run test:win
+
+      - name: Build Windows NSIS installer
+        run: npm run dist
+
+      - name: Verify packaged ASAR and unpacked Win32 daemon
+        run: node scripts/verify-send-package.cjs
+
+      - name: Prepare release assets & SHA256 checksums
+        id: assets
+        shell: pwsh
+        run: |
+          $pkgVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $exe = Get-ChildItem -LiteralPath dist -Filter *.exe | Select-Object -First 1
+          if (-not $exe) {
+            throw "No .exe installer found in dist/"
+          }
+          $cleanName = "AI-Kefu-Setup-$pkgVersion-win-x64.exe"
+          $cleanPath = Join-Path dist $cleanName
+          Copy-Item -LiteralPath $exe.FullName -Destination $cleanPath -Force
+          $hash = (Get-FileHash -LiteralPath $cleanPath -Algorithm SHA256).Hash.ToLower()
+          $sumsPath = Join-Path dist "SHA256SUMS.txt"
+          "$hash  $cleanName" | Set-Content -LiteralPath $sumsPath -Encoding ascii
+          "exe_path=$cleanPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "sums_path=$sumsPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Upload installer to GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ steps.meta.outputs.tag }}"
+          $ErrorActionPreference = 'Continue'
+          gh release view $tag --repo $env:GITHUB_REPOSITORY --json tagName > $null 2>&1
+          $exists = ($LASTEXITCODE -eq 0)
+          $ErrorActionPreference = 'Stop'
+          if (-not $exists) {
+            gh release create $tag --repo $env:GITHUB_REPOSITORY --title "AI客服 $tag" --generate-notes
+            if ($LASTEXITCODE -ne 0) { throw "Failed to create release $tag" }
+          }
+          gh release upload $tag "${{ steps.assets.outputs.exe_path }}" "${{ steps.assets.outputs.sums_path }}" --clobber --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw "Failed to upload release assets for $tag" }

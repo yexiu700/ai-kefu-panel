@@ -1,7 +1,7 @@
 {
   "name": "ai-kefu-panel",
   "version": "0.2.35",
-  "description": "AI客服（原版前端 + Electron 壳）",
+  "description": "电商客服 Windows 桌面话术面板与 AI 助手（自动跟随聊天窗、飞书话术同步、图文一键填入与发送）",
   "main": "electron/main.js",
   "productName": "AI客服",
   "private": true,
