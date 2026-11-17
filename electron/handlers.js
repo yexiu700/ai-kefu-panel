@@ -10,7 +10,7 @@ const win32 = require('./win32')
 const assist = require('./assist')
 const feishu = require('./feishu-sync')
 const feishuConfig = require('./feishu-config')
-const { resolveSendRule, explicitSendMode } = require('../frontend/panel/send-rule')
+const { normalizeExeName, resolveSendRule, explicitSendMode } = require('../frontend/panel/send-rule')
 let feishuSyncPending = null
 
 /** @type {{ panelVisible: boolean, target: any, pinned: boolean, hotkeysSuspended: boolean, autostart: boolean, stubs: string[] }} */
@@ -24,8 +24,11 @@ const runtime = {
 }
 
 function setTarget(next, opts = {}) {
+  const prevExe = normalizeExeName(runtime.target?.exe)
   runtime.target = next
   if (opts.emit) emitAll('target-changed', runtime.target)
+  const nextExe = normalizeExeName(runtime.target?.exe)
+  if (prevExe !== nextExe) opts.onTargetExeChanged?.(runtime.target?.exe || null)
 }
 
 
@@ -112,6 +115,7 @@ async function handleCommand(cmd, args = {}, ctx) {
           store.backupNow(Infinity)
           store.saveLibrary(feishu.replaceCompanyGroups(latest, company).library, { skipBackup: true })
           emitAll('library-changed', { origin: 'feishu-sync' })
+          ctx?.syncHotkeys?.()
         }
         store.updateSettings({ feishuLastSyncMessage: synced.result.message, ...(synced.result.ok ? { feishuLastSyncAt: new Date().toISOString() } : {}) })
         return synced.result
@@ -129,8 +133,11 @@ async function handleCommand(cmd, args = {}, ctx) {
       // 仅记使用次数的保存不做备份，免得挤掉真正的历史备份
       store.saveLibrary(library, { skipBackup: args.origin === 'panel-usage' })
       emitAll('library-changed', { origin: args.origin ?? null })
+      const hotkeyFailures = args.origin === 'panel-usage'
+        ? asFailureList(ctx?.getHotkeyFailures?.())
+        : asFailureList(ctx?.syncHotkeys?.())
       // 原版前端期望 { hotkeyFailures, conflict? }，不能返回 true
-      return { hotkeyFailures: [], conflict: undefined }
+      return { hotkeyFailures, conflict: undefined }
     }
 
     case 'get_settings':
@@ -250,8 +257,12 @@ async function handleCommand(cmd, args = {}, ctx) {
       return store.listBackups()
     case 'backup_now':
       return store.backupNow()
-    case 'restore_backup':
-      return store.restoreBackup(args.id)
+    case 'restore_backup': {
+      const restored = store.restoreBackup(args.id)
+      emitAll('library-changed', { origin: 'restore-backup' })
+      ctx?.syncHotkeys?.()
+      return restored
+    }
 
     case 'get_autostart':
       return runtime.autostart
@@ -327,6 +338,7 @@ async function handleCommand(cmd, args = {}, ctx) {
       }
       runtime.pinned = true
       emitAll('target-changed', runtime.target)
+      ctx?.syncHotkeysForTarget?.(runtime.target?.exe || null)
       return runtime.target
     }
     case 'unpin_target': {
@@ -530,4 +542,27 @@ async function handleCommand(cmd, args = {}, ctx) {
   }
 }
 
-module.exports = { handleCommand, runtime, emitAll, getPanelState, setTarget }
+async function triggerPhraseHotkey(phraseId, ctx) {
+  try {
+    const result = await handleCommand('send_phrase', { phraseId }, ctx)
+    if (result && result.ok !== false && !result.unbound) {
+      const lib = store.loadLibrary()
+      const hit = findPhrase(lib, phraseId)
+      if (hit) {
+        hit.useCount = (hit.useCount || 0) + 1
+        hit.lastUsedAt = Date.now()
+        store.saveLibrary(lib, { skipBackup: true })
+        emitAll('library-changed', { origin: 'panel-usage' })
+      }
+    }
+    emitAll('phrase-hotkey-triggered', { phraseId, result })
+    return result
+  } catch (err) {
+    const message = String(err?.message || err)
+    const failed = { ok: false, error: message, message }
+    emitAll('phrase-hotkey-triggered', { phraseId, result: failed })
+    return failed
+  }
+}
+
+module.exports = { handleCommand, runtime, emitAll, getPanelState, setTarget, triggerPhraseHotkey }

@@ -28,7 +28,7 @@
 
 - **为什么：** 管理端可以给一条话术设热键，飞书同步也会占热键，但主进程没有 `globalShortcut.register`。说明里写的「一按就发」目前不会发生。
 - **大小：** 中。要处理冲突（显隐、搜索、问 AI、两条话术抢同一个键），库变更后要重注册，并且只对当前能用的话术生效。
-- **状态：** 未做。做之前先做第 2 项，把注册和重注册的入口收干净。
+- **状态：** 已完成（迭代 #5）。`electron/hotkeys.js` 按优先级注册全局热键（显隐、搜索、问 AI）与当前可用话术热键（过滤空内容/空媒体话术；指定了 `group.apps` 的分组仅在未限定或当前目标聊天进程匹配时激活，避免劫持其他软件按键），统一检测全局冲突、话术重复与系统占用并在 `save_library` / `hotkey-failures` 回传 `{ hotkey, reason }`；触发时由主进程直接按当前聊天软件 `resolveSendRule` 发送或填入、累加 `useCount`（不抢聊天窗焦点），并在面板同步本地最近使用与失败/未连接提示。
 
 ## 接着做
 
@@ -100,3 +100,9 @@
 
 - 完成第 3 项：`electron/store.js` 的 `loadLibrary()` 在 `library.json` 损坏或非对象根结构时，先将原始字节完整备份至 `backups/library-corrupt-<timestamp>.json.bak` 再初始化空库；备份失败时不覆盖磁盘原文件，且 `.json.bak` 不受 20 份常规备份轮转删除影响、不污染管理端备份恢复列表。
 - 验证：新增 `scripts/unit-store-corrupt.cjs` 并纳入 `npm test` 全量通过。
+
+### #5
+
+- 完成第 4 项：`electron/hotkeys.js` 扩展支持单条话术全局热键注册，严格遵循全局热键优先 → 话术顺序优先的冲突检测（全局冲突、话术间抢同一键、系统占用均回报 `{ hotkey, reason }`）；过滤空内容且无媒体的话术；限定 `group.apps` 的分组按当前目标聊天进程按需激活热键（同进程窗口移动零重注册）。
+- `save_library`（排除 `panel-usage` 计数写回）、`restore_backup`、`sync_company_from_feishu` 自动重注册并返回真实 `hotkeyFailures`；热键触发由主进程 `triggerPhraseHotkey` 直接走 `send_phrase`（尊重当前进程 `appRules` 的 `mode`/`key`、不抢聊天窗口焦点、成功累加 `useCount`），面板监听 `phrase-hotkey-triggered` 更新本地计数与错误/未连接提示。
+- 验证：扩展 `scripts/unit-hotkeys.cjs` 并跑通全量 `npm test`；Windows 实机话术热键一按即发与跨软件限定分组切换待手测。

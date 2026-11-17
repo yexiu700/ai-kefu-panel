@@ -930,6 +930,16 @@
     listen('assist-state', onAssist)
     listen('focus-search', () => { const q = $('#q'); q.focus(); q.select() })
     listen('trigger-assist', () => { askAi() })
+    listen('phrase-hotkey-triggered', (payload) => {
+      if (!payload?.phraseId) return
+      bumpUsage(payload.phraseId)
+      const r = payload.result
+      if (r?.unbound || r?.mode === 'clipboard') {
+        toast(r?.message || '已复制，请在聊天窗粘贴（未连接聊天窗）', 'warn')
+      } else if (r && r.ok === false) {
+        toast(sendFailureMessage(r), 'err')
+      }
+    })
 
     $('#q').focus()
   }
