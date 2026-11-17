@@ -28,6 +28,7 @@ const NODE_UNIT_SUITES = [
   'scripts/unit-feishu-sync.mjs',
   'scripts/unit-feishu-config.cjs',
   'scripts/unit-media.cjs',
+  'scripts/unit-hotkeys.cjs',
 ]
 
 const WIN_POWERSHELL_SUITES = [

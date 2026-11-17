@@ -1,4 +1,4 @@
-﻿/* AI客服 · 主面板
+/* AI客服 · 主面板
  * 直接走 preload 注入的 __TAURI_INTERNALS__，命令/事件与原版后端一致，主进程无需改动。
  */
 (() => {
@@ -646,7 +646,11 @@
       item('top', '窗口置顶', { check: s.panel?.alwaysOnTop !== false }) +
       item('theme', '外观', { sub: { auto: '跟随系统', light: '浅色', dark: '深色' }[theme] || '跟随系统' }) +
       `<div class="sep"></div>` +
-      `<div class="note">Enter 执行 · Ctrl+Enter 另一种方式 · Alt+1~9 快选<br>${esc(s.hotkeys?.togglePanel || 'Ctrl+Alt+K')} 显隐 · ${esc(s.hotkeys?.focusSearch || 'Ctrl+Alt+F')} 搜索</div>` +
+      `<div class="note">Enter 执行 · Ctrl+Enter 另一种方式 · Alt+1~9 快选<br>${[
+        `${esc(s.hotkeys?.togglePanel || 'Ctrl+Alt+K')} 显隐`,
+        s.hotkeys?.focusSearch !== '' ? `${esc(s.hotkeys?.focusSearch || 'Ctrl+Alt+F')} 搜索` : '',
+        s.hotkeys?.assist !== '' ? `${esc(s.hotkeys?.assist || 'Ctrl+Alt+J')} 问 AI` : '',
+      ].filter(Boolean).join(' · ')}</div>` +
       `<div class="sep"></div>` +
       item('quit', '退出 AI客服')
     openPop($('#menuBtn'), html, async (k) => {
@@ -925,6 +929,7 @@
     })
     listen('assist-state', onAssist)
     listen('focus-search', () => { const q = $('#q'); q.focus(); q.select() })
+    listen('trigger-assist', () => { askAi() })
 
     $('#q').focus()
   }

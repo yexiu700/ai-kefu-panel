@@ -10,6 +10,7 @@ const { handleCommand, runtime, emitAll, getPanelState, setTarget } = require('.
 const win32 = require('./win32')
 const { startSnapLoop } = require('./snap')
 const { createUiHandler } = require('./ui-protocol')
+const { createHotkeyManager } = require('./hotkeys')
 
 const ROOT = path.join(__dirname, '..')
 const FRONTEND = path.join(ROOT, 'frontend')
@@ -132,43 +133,32 @@ function setPanelVisible(visible) {
   runtime.panelVisible = visible
 }
 
-function acceleratorFromSetting(s) {
-  // Frontend uses Ctrl+Alt+K style; Electron wants CommandOrControl etc.
-  if (!s) return null
-  return String(s)
-    .replace(/CommandOrControl/gi, 'CommandOrControl')
-    .replace(/\bCtrl\b/gi, 'Control')
-    .replace(/\bCmd\b/gi, 'Command')
-    .replace(/\s*\+\s*/g, '+')
+function emitToPanel(event, payload = {}) {
+  setPanelVisible(true)
+  emitAll('panel-state', getPanelState())
+  if (panelWindow && !panelWindow.isDestroyed() && panelWindow.webContents.isLoading()) {
+    panelWindow.webContents.once('did-finish-load', () => emitAll(event, payload))
+  } else {
+    emitAll(event, payload)
+  }
 }
 
+const hotkeyManager = createHotkeyManager({
+  globalShortcut,
+  getSettings: () => store.loadSettings(),
+  isSuspended: () => !!runtime.hotkeysSuspended,
+  onTogglePanel: () => {
+    const vis = !(panelWindow && !panelWindow.isDestroyed() && panelWindow.isVisible())
+    setPanelVisible(vis)
+    emitAll('panel-state', getPanelState())
+  },
+  onFocusSearch: () => emitToPanel('focus-search', {}),
+  onAssist: () => emitToPanel('trigger-assist', {}),
+  onFailuresChanged: (list) => emitAll('hotkey-failures', list),
+})
+
 function registerHotkeys() {
-  try { globalShortcut.unregisterAll() } catch { /* ignore */ }
-  if (runtime.hotkeysSuspended) return
-  const settings = store.loadSettings()
-  const toggle = acceleratorFromSetting(settings.hotkeys?.togglePanel)
-  const search = acceleratorFromSetting(settings.hotkeys?.focusSearch)
-  if (toggle) {
-    try {
-      globalShortcut.register(toggle, () => {
-        const vis = !(panelWindow && panelWindow.isVisible())
-        setPanelVisible(vis)
-        emitAll('panel-state', getPanelState())
-      })
-    } catch (e) {
-      console.warn('[hotkey] toggle failed', toggle, e)
-    }
-  }
-  if (search) {
-    try {
-      globalShortcut.register(search, () => {
-        setPanelVisible(true)
-        emitAll('focus-search', {})
-      })
-    } catch (e) {
-      console.warn('[hotkey] search failed', search, e)
-    }
-  }
+  return hotkeyManager.sync()
 }
 
 function createTray() {
@@ -200,6 +190,8 @@ function wireIpc() {
     openManager: (tab) => createManagerWindow(tab),
     setPanelVisible,
     broadcast: emitAll,
+    syncHotkeys: () => hotkeyManager.sync(),
+    getHotkeyFailures: () => hotkeyManager.getFailures(),
   }
 
   ipcMain.handle('tauri-invoke', async (_e, payload) => {

@@ -1,4 +1,4 @@
-﻿'use strict'
+'use strict'
 const fs = require('node:fs')
 const path = require('node:path')
 const { app } = require('electron')
@@ -203,9 +203,15 @@ function normalizeSettings(raw) {
     if (h <= 640) merged.panel.floatHeight = 832
   }
   if (!merged.hotkeys || typeof merged.hotkeys !== 'object') merged.hotkeys = { ...defaults.hotkeys }
-  if (!merged.hotkeys.assist) merged.hotkeys.assist = defaults.hotkeys.assist
-  if (!merged.hotkeys.togglePanel) merged.hotkeys.togglePanel = defaults.hotkeys.togglePanel
-  if (!merged.hotkeys.focusSearch) merged.hotkeys.focusSearch = defaults.hotkeys.focusSearch
+  if (typeof merged.hotkeys.togglePanel !== 'string' || !merged.hotkeys.togglePanel.trim()) {
+    merged.hotkeys.togglePanel = defaults.hotkeys.togglePanel
+  }
+  if (typeof merged.hotkeys.focusSearch !== 'string') {
+    merged.hotkeys.focusSearch = defaults.hotkeys.focusSearch
+  }
+  if (typeof merged.hotkeys.assist !== 'string') {
+    merged.hotkeys.assist = defaults.hotkeys.assist
+  }
   return merged
 }
 
