@@ -21,6 +21,7 @@ const NODE_UNIT_SUITES = [
   'scripts/unit-send-media.cjs',
   'scripts/unit-toasts.cjs',
   'scripts/unit-store-cache.cjs',
+  'scripts/unit-store-corrupt.cjs',
   'scripts/unit-snap-policy.cjs',
   'scripts/unit-ui-protocol.cjs',
   'scripts/unit-pinyin-lazy.cjs',

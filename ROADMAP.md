@@ -95,3 +95,8 @@
 - `update_settings` 与 `suspend_hotkeys` 动态重注册全局热键并同步 `hotkeyFailures`，无需重启应用；`store.normalizeSettings` 保留用户清空可选热键（`""`）。
 - 问 AI 热键通过 `trigger-assist` 事件唤起面板并调用 `askAi()`，不在热键回调中直接发消息。
 - 验证：新增 `scripts/unit-hotkeys.cjs` 并纳入 `npm test` 全量通过；Windows 实机全局热键触发与占用提示待手测。
+
+### #4
+
+- 完成第 3 项：`electron/store.js` 的 `loadLibrary()` 在 `library.json` 损坏或非对象根结构时，先将原始字节完整备份至 `backups/library-corrupt-<timestamp>.json.bak` 再初始化空库；备份失败时不覆盖磁盘原文件，且 `.json.bak` 不受 20 份常规备份轮转删除影响、不污染管理端备份恢复列表。
+- 验证：新增 `scripts/unit-store-corrupt.cjs` 并纳入 `npm test` 全量通过。
