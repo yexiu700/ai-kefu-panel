@@ -144,6 +144,16 @@ async function main() {
   const psSource = psBytes.toString('utf8')
   assert.match(psSource, /\$script:currentReqId/, 'win32-daemon.ps1 must track current request id')
   assert.match(psSource, /\$req\.id/, 'win32-daemon.ps1 must read $req.id from incoming JSON')
+  assert.doesNotMatch(
+    psSource,
+    /\bStart-Sleep\b/,
+    'win32-daemon.ps1 must avoid Start-Sleep cmdlet module autoload latency on the paste/focus path',
+  )
+  assert.match(
+    psSource,
+    /\[System\.Threading\.Thread\]::Sleep/,
+    'win32-daemon.ps1 must use [System.Threading.Thread]::Sleep for deterministic sub-100ms waits',
+  )
 
   win32.dispose()
   console.log('unit-win32-rpc: PASS (request/response id correlation, duplicate/stale isolation, chunked framing)')
