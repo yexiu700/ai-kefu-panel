@@ -1,94 +1,106 @@
 # AGENTS.md
 
-给后续改这个仓库的人：AI客服是客服每天贴在聊天窗口旁边用的 Windows 面板。改动要小，能单测的先单测。这台开发环境是 Linux，跑不了真正的窗口吸附和粘贴。
+给后续改这个仓库的人与 AI Agent：**AI客服** 是电商客服每天贴在聊天窗口旁边用的 Windows 桌面话术面板与 AI 助手（当前主线版本见 `package.json` **0.2.35**）。
 
-## 项目是什么
+**核心开发准则**：改动要小、范围要准；能单测的先补单测再改逻辑；Linux/云端沙箱跑不了真正的 Win32 窗口吸附、焦点切换与剪贴板粘贴，涉及这些路径必须在交付说明中列出 Windows 实机待手测项。
 
-版本见 `package.json`（当前主线 **0.2.35**）。产品名「AI客服」。客服用它搜话术、填进或发出到紫鸟、京麦、千牛、浏览器等聊天窗，也可以把剪贴板里的买家消息交给「问 AI」生成建议。话术从飞书多维表格同步公司库，私人话术留在本机。
+---
 
-日常用的界面是 `frontend/panel/panel.js`（`frontend/index.html` 加载它），不是 `frontend/assets/` 里那套压缩后的旧面板。管理窗口是 `frontend/manager.html` 加上 `frontend/assets/` 里的压缩包，改那里要极小、不要格式化整文件。
-
-## 目录
-
-| 路径 | 作用 |
-| --- | --- |
-| `electron/main.js` | 窗口、托盘、`aikefu://` 协议、全局热键、吸附循环、单实例 |
-| `electron/preload.js` | 把 IPC 伪装成原版前端用的 `__TAURI_INTERNALS__` |
-| `electron/handlers.js` | 所有命令：话术、设置、发送、飞书、问 AI |
-| `electron/store.js` | 设置和话术库的读写、规范化、备份 |
-| `electron/send.js` | 填入/发送队列：先写剪贴板，再交给 Win32 |
-| `electron/win32.js` + `electron/win32-daemon.ps1` | 持久 PowerShell：激活窗口、Ctrl+V、发送键、文件剪贴板 |
-| `electron/win32-snapshot.js` | 仅前台窗口和矩形走 koffi；失败回退 daemon。发送不走这里 |
-| `electron/snap.js` + `electron/snap-policy.js` | 跟随/吸附。隐藏或未吸附时放慢轮询 |
-| `electron/feishu-sync.js` + `electron/feishu-config.js` | 飞书公司话术同步和本机 `feishu.env` |
-| `electron/assist.js` + `electron/llm.js` | 问 AI：只读剪贴板，不读聊天窗 |
-| `electron/media.js` | 图片和附件落在本机媒体目录 |
-| `frontend/panel/` | 侧边面板：搜索、列表、发送、问 AI |
-| `frontend/panel/send-rule.js` | 按当前进程解析发送方式和发送键。面板和主进程共用这一份 |
-| `scripts/` | 不启动应用就能跑的单测和校验 |
-
-## 数据放在哪（不要改路径）
-
-主进程把 `userData` 指到 `%APPDATA%\huiyou-original-shell`。`getDataDir()` 再拼一层同名目录。话术和设置实际在：
-
-`%APPDATA%\huiyou-original-shell\huiyou-original-shell\library.json`
-`%APPDATA%\huiyou-original-shell\huiyou-original-shell\settings.json`
-
-媒体在同目录的 `media\`、`stickers\`，备份在 `backups\`。不要「整理」这层嵌套，也不要改目录名，否则已安装用户的话术和设置会找不回来。
-
-发送日志不在这个目录里，而在 `%APPDATA%\AI客服\logs`。飞书凭证在 `%USERPROFILE%\.config\ai-kefu-panel\feishu.env`，不进 `settings.json`，也不进仓库。
-
-## 怎么跑
+## 1. 快速命令（改前改后必跑）
 
 ```bash
-npm install
-npm start                  # 本机 Electron；Linux 上窗口跟随和粘贴是空的
-npm run start:panel
-npm run start:manager
-npm run dist               # Windows NSIS 安装包。日常改动不要打这个包，也不要改版本号
+# 日常高频验证（零 GUI 依赖，Linux/Windows 秒级完成，未装 Electron 也能跑）
+npm test                  # 全量 JS 语法检查 (node --check) + 12 个跨平台隔离单测套件
+npm run check             # 仅跑 electron/、frontend/panel/、scripts/ 语法检查
+npm test -- send          # 按关键字只跑相关单测（如 send / feishu / media / snap / toast / pinyin）
+
+# 本机启动与进阶验证（需先 npm install）
+npm start                 # 启动应用（Linux 上窗口跟随和粘贴为空操作）
+npm run start:panel       # 仅调侧边面板
+npm run start:manager     # 仅调管理窗口
+npm run smoke:ui          # Electron 隔离渲染器冒烟（协议、preload、IPC、懒加载 chunk）
+npm run test:win          # Windows 下额外运行 PowerShell AST 单测与 Koffi 快照对照
+
+# 打包（仅维护者发版执行！日常开发不要打安装包，也不要改 package.json 的 version）
+npm run dist
 ```
 
-发版由维护者打包。不要为了一次小改动去改 `package.json` 的 `version`。
+---
 
-### 测试
+## 2. 任务寻址表（按需求直达文件与测试）
 
-Linux 上跑这些 Node 脚本即可。带 `win32` / `paste-wait` 的脚本在非 Windows 上会跳过或需要 PowerShell，不要把跳过当成失败。
+> [!IMPORTANT]
+> **认准前端入口，切勿改错文件！**
+> - **日常侧边面板（主力源码）**：`frontend/index.html` + `frontend/panel/panel.js` + `frontend/panel/panel.css` + `frontend/panel/send-rule.js`。
+> - **管理窗口（预编译压缩包）**：`frontend/manager.html` + `frontend/assets/{manager-*,GuideSpotlight-*,TemplatesPage-*}`。仓库无原始 Vue 源码，非必要不改，要改只做最小局部替换，**严禁格式化压缩包**。
+> - **历史废弃文件（禁止修改，保留供旧包校验）**：`frontend/index.legacy.html`、`frontend/assets/index-*`。
 
-```bash
-node scripts/unit-send-rule.cjs
-node scripts/unit-send.cjs
-node scripts/unit-send-media.cjs
-node scripts/unit-toasts.cjs
-node scripts/unit-store-cache.cjs
-node scripts/unit-snap-policy.cjs
-node scripts/unit-ui-protocol.cjs
-node scripts/unit-pinyin-lazy.cjs
-node scripts/unit-manager-lazy.cjs
-node scripts/unit-feishu-sync.mjs
-node scripts/unit-feishu-config.cjs
-node scripts/unit-media.cjs
-node --check frontend/panel/panel.js
-node --check electron/handlers.js
-```
+| 你要改什么 | 先读哪些文件 | 必跑单测 |
+| --- | --- | --- |
+| 面板搜索、高亮、常用区、列表交互、快捷键 | `frontend/panel/panel.js`、`frontend/index.html`、`frontend/panel/panel.css` | `npm test -- pinyin`、`npm test -- toast` |
+| 按软件发送方式 / 发送键（`appRules`） | `frontend/panel/send-rule.js`（面板与主进程共用）、`electron/handlers.js` | `npm test -- send-rule` |
+| 填入/发送队列、延迟、剪贴板恢复、发送日志 | `electron/send.js`、`electron/send-log.js`、`electron/win32-daemon.ps1` | `npm test -- send`（Windows 加跑 `npm run test:win`） |
+| 图片 / 附件导入、魔数校验、`CF_HDROP` 文件粘贴 | `electron/media.js`、`electron/send.js`、`electron/handlers.js`、`electron/main.js` (`huiyou-media://`) | `npm test -- media` |
+| 窗口自动跟随、锁定、贴靠吸附、轮询节流 | `electron/snap.js`、`electron/snap-policy.js`、`electron/win32-snapshot.js`、`electron/store.js` (`WIN_CHAT_APPS`) | `npm test -- snap` |
+| Win32 底层窗口/激活/UIA/图标 | `electron/win32.js`、`electron/win32-snapshot.js` (`koffi`)、`electron/win32-daemon.ps1` | `npm test -- send`（Windows 跑 `smoke-win32-snapshot.cjs`） |
+| 话术库/设置读写、归一化、内存缓存、备份恢复 | `electron/store.js`、`electron/handlers.js` | `npm test -- store` |
+| 飞书公司话术同步、`feishu.env` 凭证导入 | `electron/feishu-sync.js`、`electron/feishu-config.js`、`electron/handlers.js` | `npm test -- feishu` |
+| 问 AI（剪贴板买家消息 + 本地检索 + LLM 调用） | `electron/assist.js`、`electron/llm.js`、`frontend/panel/panel.js` (`askAi`/`aiCollect`) | `npm test` |
+| 窗口生命周期、托盘、全局热键、`aikefu://` 协议、IPC 桥 | `electron/main.js`、`electron/ui-protocol.js`、`electron/preload.js`、`electron/handlers.js` | `npm test -- ui-protocol`（有 Electron 时跑 `npm run smoke:ui`） |
 
-`npm test` 没有总入口。`npm run test:unit` 只跑飞书同步，`npm run test:media` 只跑媒体。改了哪块就跑对应脚本，并在 PR 里写上 Windows 上还要手测什么。
+---
 
-## 行为约定（改代码时遵守）
+## 3. 目录与进阶文档导航（Progressive Disclosure）
 
-- **搜索只匹配标题。** `scoreFor` 不看正文。正文可以高亮、可以用 `snippet` 截片段，标题不要截断、不要省略号。
-- **拼音**用 `pinyin-pro`：全拼必须从某个字的拼音开头对齐，首字母按标题里的字序。拼音库在首屏画出来之后再加载；加载失败就退回纯文本搜索。
-- **跟随列表**在 `electron/store.js` 的 `WIN_CHAT_APPS`。必须保留 `紫鸟`、`紫鸟浏览器`、`JingMai.exe`（以及现有的京麦 / 咚咚进程名）。用户设置里缺的默认项，`normalizeSettings` 会补上，不要改成覆盖用户列表。
-- **提示**：0.2.32 起成功和普通信息不再弹 toast。`toast()` 只接受 `err` 和 `warn`。失败、未连接要手动粘贴、内容为空，这些要留着。不要把「已发送」「已复制成功」「同步成功」加回去。
-- **发送**：文字先于媒体；媒体走文件剪贴板（CF_HDROP），没有位图回退。填入不按发送键。剪贴板恢复只针对已确认的文字。未绑定窗口时不要声称已经发出去。
-- **按软件的发送方式和发送键**存在 `settings.send.appRules`（`{ exe, mode, key }`，空字段表示跟随全局）。解析只在 `frontend/panel/send-rule.js`。进程名按去掉 `.exe` 后的全名相等匹配，不要用「包含」匹配，避免 `qq` 套到 `qqbrowser`。点「填入 / 发送」以这次点击为准。常用区在已连接时点整行仍是直接发送，这是现有行为，见 `ROADMAP.md`。
-- **问 AI** 只读剪贴板。不要做成自动截屏或读取聊天窗口。
-- **飞书同步**只替换公司分组。话术 id 保持 `feishu:<record_id>`，这样收藏和 `useCount` 才能对上。私人话术不要被同步清掉。
-- 主进程命令要兼容原版前端的返回形状（例如 `update_settings` 必须带 `settings`，`save_library` 带 `hotkeyFailures`）。
+复杂改动请按需查阅 `docs/` 下的专项规格文档，不必一次通读全仓源码：
 
-## 不要做的事
+- **[`docs/architecture.md`](docs/architecture.md)**：全链路架构图、双前端与双通道 Win32 设计、数据 JSON 结构、ASAR 解包约束。
+- **[`docs/ipc-contracts.md`](docs/ipc-contracts.md)**：`tauri-invoke` 全量命令入参/防崩返回契约、`tauri-event` 事件、`win32-daemon.ps1` 协议。
+- **[`docs/testing-and-workflow.md`](docs/testing-and-workflow.md)**：三层测试金字塔、**`panel.js`/压缩包的 `vm` 源码切片锚点表**、新增隔离单测模板、Windows 手测 Checklist。
+- **[`ROADMAP.md`](ROADMAP.md)**：按客服真实痛点排列的待办事项与迭代记录。
+- **[`docs/history/`](docs/history/)**：0.2.31–0.2.33 粘贴提速、移除成功 Toast、性能与协议重构历史报告。
 
-- 不要改 `huiyou-original-shell` 这个目录名，不要把库迁到别的路径。
-- 不要顺手升级 Electron、koffi、pinyin-pro，除非这次任务就是升级。
-- 不要格式化 `frontend/assets/*.js` 压缩包。
-- 不要把飞书密钥、模型密钥、`feishu.env`、`.api_key` 写进仓库。
-- 不要在 Linux 上声称已经验证过粘贴、吸附或全局热键；那些要在 Windows 上对真实聊天窗看一次。
+---
+
+## 4. 数据放在哪（绝对不要改路径）
+
+主进程把 `userData` 固定指到 `%APPDATA%\huiyou-original-shell`，`store.getDataDir()` 再拼一层同名子目录。真实用户数据位于：
+
+- 话术库：`%APPDATA%\huiyou-original-shell\huiyou-original-shell\library.json`
+- 设置项：`%APPDATA%\huiyou-original-shell\huiyou-original-shell\settings.json`
+- 媒体 / 表情 / 备份：同目录下的 `media\`、`stickers\`、`backups\`
+- 发送诊断日志：`%APPDATA%\AI客服\logs\send-YYYYMMDD.log`（与 `userData` 不在同一目录，排障时注意区分）
+- 飞书凭证：`%USERPROFILE%\.config\ai-kefu-panel\feishu.env`（绝不写入 `settings.json`，绝不进 Git）
+- 大模型密钥：环境变量 `HUIYOU_LLM_API_KEY` / `NEXTOP_LLM_API_KEY` 或 `%USERPROFILE%\.huiyou\llm_api_key`
+
+**严禁「整理」双层嵌套目录，严禁更改 `huiyou-original-shell` 目录名，否则线上老用户升级后话术和设置会全部丢失。**
+
+---
+
+## 5. 行为约定与核心不变量（改代码必须遵守）
+
+1. **搜索只匹配标题**：`scoreFor` 只看 `p.title`，**不搜正文**。正文可用 `highlight` 高亮或 `snippet` 截取上下文片段；**标题绝不截断、绝不加省略号**。
+2. **拼音延迟加载**：使用 `pinyin-pro`；全拼必须从某个汉字的拼音开头对齐，首字母按标题字序匹配。拼音库在首屏绘制完成后再异步加载；加载失败时自动退回纯文本搜索。
+3. **默认跟随聊天软件列表**：在 `electron/store.js` 的 `WIN_CHAT_APPS`，必须保留 `紫鸟`、`紫鸟浏览器`、`JingMai.exe` 及现有千牛/拼多多/京麦/咚咚/抖店/得物/千帆/微信小店等进程名。`normalizeSettings` 只向用户列表补齐缺失默认项，**不要覆盖用户自定义项**。
+4. **静默 Toast 策略**：自 0.2.32 起，成功与普通信息一律静默。`toast()` **只接受 `'err'` 和 `'warn'`**。发送失败、未连接需手动粘贴、回复内容为空必须保留提示；不要把「已发送」「已复制」「同步成功」加回去。
+5. **发送与剪贴板铁律**：
+   - 混合话术**先文字、后媒体**；媒体走持久化文件剪贴板（`CF_HDROP`），无位图回退。
+   - `fill` 模式绝不按发送键。
+   - 剪贴板恢复仅针对已绑定窗口且成功的纯文字；**媒体粘贴、发送失败、未绑定窗口绝不恢复覆盖剪贴板**。
+   - 未绑定窗口或无法回读校验（`unavailable`）时，绝不声称目标窗口已确认收到。
+6. **按软件单独发送规则**：存于 `settings.send.appRules`（`{ exe, mode, key }`，空值跟随全局），统一在 `frontend/panel/send-rule.js` 解析。进程名去掉 `.exe` 后按**全名相等（忽略大小写）**匹配，严禁用 `includes`（避免 `qq` 误匹配 `qqbrowser`）。显式点击「填入 / 发送」按钮以本次点击为准；常用区在已连接时点整行仍直接发送（见 `ROADMAP.md` #8）。
+7. **问 AI 边界**：只读系统剪贴板文本，**绝不做自动截屏、OCR 或读取聊天窗口内容**。
+8. **飞书同步边界**：只替换公司分组（`scope !== 'private'`），**绝不清除私人话术与表情**。公司话术 ID 保持 `feishu:<record_id>` 稳定，以保留本地收藏（`favorite`）与使用统计（`useCount`、`lastUsedAt`）。
+9. **原版前端 IPC 返回兼容**：`update_settings` 必须返回 `{ settings, hotkeyFailures }`；`save_library` 必须返回 `{ hotkeyFailures, conflict }`；`pick_images`/`pick_files` 必须返回带可遍历 `errors` 数组的对象；`submission_action` 列表类必须返回 `[]`（详见 [`docs/ipc-contracts.md`](docs/ipc-contracts.md)）。
+10. **注意单测源码切片锚点**：`unit-toasts.cjs`、`unit-pinyin-lazy.cjs`、`unit-send-media.cjs` 通过函数签名字符串从 `panel.js` 切片做沙箱测试，重构周边函数顺序前请先看 [`docs/testing-and-workflow.md`](docs/testing-and-workflow.md) 第 2 节。
+
+---
+
+## 6. 不要做的事
+
+- 不要改 `huiyou-original-shell` 目录名，不要迁移用户数据目录，单测一律用 `os.tmpdir()` 临时目录。
+- 不要顺手升级 `electron`、`koffi`、`pinyin-pro` 或改动 `package.json` 的 `version`，除非任务明确要求。
+- 不要移除 `package.json -> build.asarUnpack` 中的 `electron/win32-daemon.ps1` 与 `koffi-win32-x64`。
+- 不要格式化 `frontend/assets/*.js` 压缩包，不要使用 `git add -A` 把本地临时文件或凭证带入提交。
+- 不要把飞书密钥、模型密钥、`feishu.env`、`.api_key` 写进仓库或打印进日志/IPC 响应。
+- 不要在 Linux 上声称已验证过粘贴、窗口吸附或全局热键；必须在交付物中写清 Windows 实机手测项。

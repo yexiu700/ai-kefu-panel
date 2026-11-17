@@ -41,7 +41,7 @@
 ### 6. 给搜索补单测
 
 - **为什么：** 标题-only、全拼必须从字首对齐、首字母、标题不截断，现在都靠读代码保证。`scripts/unit-pinyin-lazy.cjs` 只覆盖延迟加载。
-- **大小：** 小。把 `scoreFor` / `findToken` 抽出来或按现有脚本那样截取函数跑，不要改搜索规则。
+- **大小：** 小。把 `scoreFor` / `findToken` 抽出来或按现有脚本那样截取函数跑，不要改搜索规则；写好后挂进 `scripts/run-tests.cjs` 的 `NODE_UNIT_SUITES`。
 - **状态：** 未做。
 
 ### 7. 大话术库输入时少做整表重绘
@@ -82,3 +82,9 @@
 - 新增 `AGENTS.md` 和本文件，记下结构、测试命令和不能动的用户数据。
 - 做了第 1 项：当前聊天进程的 `appRules` 会决定发送键；默认填入或发送在没明确点击时也跟这条规则。面板菜单会提示当前窗口的单独设置，全局两项仍改全局默认。
 - 验证：`node scripts/unit-send-rule.cjs`，以及既有的发送、toast、协议、拼音、吸附策略脚本。没有在 Windows 上对真实聊天窗粘贴。
+
+### #2
+
+- 项目 AI 化与文档体系梳理：升级 `AGENTS.md`（任务寻址表、快速命令、不变量红线），新增 `CLAUDE.md`、`docs/architecture.md`、`docs/ipc-contracts.md`、`docs/testing-and-workflow.md`、`docs/README.md`；将根目录历史结果文档归档至 `docs/history/`，移除过时的 `START.txt`。
+- 统一测试与 CI 闭环：修复 `scripts/unit-media.cjs`（及 `verify-media-ui.cjs` 兜底）对 `.gitignore` 忽略文件 `docs/bugs/add-image-fail.jpg` 与未安装 `electron` 的硬依赖；新增零依赖统一运行器 `scripts/run-tests.cjs` 并接入 `npm test` / `npm run check` / `npm run test:win`；新增 GitHub Actions CI 与 PR 检查模板。
+- 验证：`npm test`（42 个文件语法检查 + 12 个跨平台单测套件全部通过）与 `git diff --check` 通过。未改动业务运行时代码与版本号。

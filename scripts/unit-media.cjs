@@ -1,4 +1,4 @@
-﻿'use strict'
+'use strict'
 const assert = require('node:assert/strict')
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), vm = require('node:vm')
 const { createRequire } = require('node:module')
@@ -9,8 +9,11 @@ function load(file, mocks) {
 }
 async function main(){
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ai-media-028-'))
- let selection={canceled:false,filePaths:[path.resolve('docs/bugs/add-image-fail.jpg')]}
- const electron={app:{getPath:()=>dir},BrowserWindow:{getFocusedWindow:()=>null},dialog:{showOpenDialog:async()=>selection},nativeImage:require('electron').nativeImage}
+ const bugFixture=path.resolve('docs/bugs/add-image-fail.jpg')
+ const sampleJpg=fs.existsSync(bugFixture)?bugFixture:path.join(dir,'fixture-1x1.jpg')
+ if(sampleJpg!==bugFixture)fs.writeFileSync(sampleJpg,Buffer.from('/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAj/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAAAP/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AN//Z','base64'))
+ let selection={canceled:false,filePaths:[sampleJpg]}
+ const electron={app:{getPath:()=>dir},BrowserWindow:{getFocusedWindow:()=>null},dialog:{showOpenDialog:async()=>selection},nativeImage:{}}
  const store=load('electron/store.js',{electron})
  const media=load('electron/media.js',{'./store':store})
  const handlers=load('electron/handlers.js',{electron,'./store':store,'./media':media,'./send':{},'./send-log':{},'./win32':{},'./assist':{},'./feishu-sync':{}})
@@ -27,7 +30,7 @@ async function main(){
  assert.deepEqual(fs.readFileSync(path.join(store.mediaDir(),file)),Buffer.from([1,2,3]))
  const pickedFile=await handlers.handleCommand('pick_files');assert.equal(pickedFile.names.length,1);assert.equal(pickedFile.errors.length,0)
  selection={canceled:true,filePaths:[]};const cancel=await handlers.handleCommand('pick_images');assert.equal(cancel.names.length,0);assert.equal(cancel.errors.length,0)
- selection={canceled:false,filePaths:[path.join(dir,'missing.png'),path.resolve('docs/bugs/add-image-fail.jpg')]}
+ selection={canceled:false,filePaths:[path.join(dir,'missing.png'),sampleJpg]}
  const partial=await handlers.handleCommand('pick_images');assert.equal(partial.names.length,1);assert.match(partial.errors[0],/不存在/)
  await assert.rejects(handlers.handleCommand('import_image',{bytes:new Uint8Array([1,2,3])}),/图片/)
  await assert.rejects(handlers.handleCommand('import_file',{bytes:new Uint8Array(),fileName:'empty.txt'}),/空/)
