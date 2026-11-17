@@ -181,6 +181,7 @@ async function handleCommand(cmd, args = {}, ctx) {
         name: 'AI客服',
         version: require('../package.json').version,
         dataDir: store.getDataDir(),
+        logDir: getLogDir(),
         platform: process.platform,
       }
 
@@ -375,9 +376,13 @@ async function handleCommand(cmd, args = {}, ctx) {
       return true
     }
 
-    case 'open_data_dir':
-      await shell.openPath(store.getDataDir())
+    case 'open_data_dir': {
+      const dir = store.getDataDir()
+      fs.mkdirSync(dir, { recursive: true })
+      const error = await shell.openPath(dir)
+      if (error) throw new Error(error)
       return true
+    }
 
     case 'contact_author':
       await shell.openExternal('mailto:3128785509@qq.com')

@@ -9,7 +9,7 @@
 ### Tier 1：跨平台快速单测（Linux / Windows 必跑，零 GUI 依赖）
 
 ```bash
-npm test                 # 语法检查 (node --check) + 全部 12 个跨平台单测套件
+npm test                 # 语法检查 (node --check) + 全部 17 个跨平台单测套件
 npm run check            # 仅跑 electron/、frontend/panel/、scripts/ 全量 JS 语法检查
 npm test -- send         # 按关键字过滤只跑相关单测（如 send / feishu / media / snap / toast）
 ```
@@ -31,7 +31,8 @@ npm test -- send         # 按关键字过滤只跑相关单测（如 send / fei
 | `scripts/unit-store-corrupt.cjs` | `store.loadLibrary()` 遇到损坏 JSON / 非对象根结构时先完整拷入 `backups/library-corrupt-*.json.bak` 再初始化空库、磁盘满时不覆盖原文件 |
 | `scripts/unit-hotkeys.cjs` | 全局热键（显隐/搜索/问 AI）与话术全局热键注册、冲突优先级、`group.apps` 按进程激活、动态重绑与录制挂起 |
 | `scripts/unit-search.cjs` | 真实加载 `pinyin-pro.js` 验证标题-only 搜索、全拼字首对齐、首字母顺序匹配、排序权重、超长标题不截断无省略号、正文 `snippet`/`highlight` 及输入防抖同步刷新 |
-| `scripts/unit-win32-rpc.cjs` | `electron/win32.js` 与 `win32-daemon.ps1` 请求/应答 `id` 关联、半包拼接、重复行与超时迟到包隔离 |
+| `scripts/unit-win32-rpc.cjs` | `electron/win32.js` 与 `win32-daemon.ps1` 请求/应答 `id` 关联、半包拼接、重复行与超时迟到包隔离、`.ps1` UTF-8 BOM 守护 |
+| `scripts/unit-menu-paths.cjs` | 面板主菜单区分发送日志（`AI客服\logs`）与话术设置目录（`huiyou-original-shell`）、静默打开与报错提示、`get_app_info` / `open_data_dir` 契约 |
 
 ### Tier 2：Electron 无头冒烟与 Windows 隔离脚本（按需在有环境时运行）
 
@@ -73,6 +74,7 @@ node scripts/verify-send-package.cjs
 | `frontend/panel/panel.js` | `scripts/unit-search.cjs` | `'  const esc ='` → `'  let toastTimer ='`、`'  const hasTarget ='` → `'  function paintActive('`、`'  function bind()'` → `'  // ———————————————————— 启动 ————————————————————'` |
 | `frontend/panel/panel.js` | `scripts/unit-toasts.cjs` | `'  async function usePhrase('` → `'  async function saveLibrary('`；`'  async function aiUse('` → `'  // 收录：'`；`'  async function syncFeishu('` → `'  async function loadLibrary('`；`'  let toastTimer ='` → `'\n  }\n'`；`'function sendFailureMessage('` |
 | `frontend/panel/panel.js` | `scripts/unit-send-media.cjs` | `'  async function usePhrase('` → `'  async function saveLibrary('` |
+| `frontend/panel/panel.js` | `scripts/unit-menu-paths.cjs` | `'  const esc ='` → `'  let toastTimer ='`、`'  const item ='` → `'  function openTargetMenu()'`、`'  function openMainMenu()'` → `'  async function patchSettings('` |
 | `frontend/assets/GuideSpotlight-Bc_qirTp.js` | `scripts/unit-toasts.cjs` | `'const xf={info:'` → `'const Jh=Symbol('` |
 | `frontend/assets/manager-DBuMfWSZ.js` | `scripts/unit-manager-lazy.cjs` | `'const mr="modulepreload"'` → `',gr=['` |
 | `electron/win32-daemon.ps1` | `scripts/smoke-win32-snapshot.cjs` | 文件开头 → `'function List-OpenApps'`；`unit-paste-wait.ps1` 按 AST 提取 `Wait-PasteResult`、`Test-TargetForeground`、`Activate-Hwnd`、`Write-Result` |
