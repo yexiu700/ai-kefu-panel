@@ -42,7 +42,7 @@
 
 - **为什么：** 标题-only、全拼必须从字首对齐、首字母、标题不截断，现在都靠读代码保证。`scripts/unit-pinyin-lazy.cjs` 只覆盖延迟加载。
 - **大小：** 小。把 `scoreFor` / `findToken` 抽出来或按现有脚本那样截取函数跑，不要改搜索规则；写好后挂进 `scripts/run-tests.cjs` 的 `NODE_UNIT_SUITES`。
-- **状态：** 未做。
+- **状态：** 已完成（迭代 #6）。新增 `scripts/unit-search.cjs` 并挂载至 `scripts/run-tests.cjs`，直接加载真实 `pinyin-pro.js` 对 `panel.js` 搜索与列表渲染切片做断言：覆盖标题-only（正文词/拼音/首字母均不计分）、全拼字首边界对齐（拒绝音节中间子串，支持末尾半音节与 `ü -> v`）、首字母按字序匹配、排序权重、超长标题不截断不加省略号，以及正文 `snippet`/`highlight` 高亮。
 
 ### 7. 大话术库输入时少做整表重绘
 
@@ -106,3 +106,8 @@
 - 完成第 4 项：`electron/hotkeys.js` 扩展支持单条话术全局热键注册，严格遵循全局热键优先 → 话术顺序优先的冲突检测（全局冲突、话术间抢同一键、系统占用均回报 `{ hotkey, reason }`）；过滤空内容且无媒体的话术；限定 `group.apps` 的分组按当前目标聊天进程按需激活热键（同进程窗口移动零重注册）。
 - `save_library`（排除 `panel-usage` 计数写回）、`restore_backup`、`sync_company_from_feishu` 自动重注册并返回真实 `hotkeyFailures`；热键触发由主进程 `triggerPhraseHotkey` 直接走 `send_phrase`（尊重当前进程 `appRules` 的 `mode`/`key`、不抢聊天窗口焦点、成功累加 `useCount`），面板监听 `phrase-hotkey-triggered` 更新本地计数与错误/未连接提示。
 - 验证：扩展 `scripts/unit-hotkeys.cjs` 并跑通全量 `npm test`；Windows 实机话术热键一按即发与跨软件限定分组切换待手测。
+
+### #6
+
+- 完成第 6 项：新增 `scripts/unit-search.cjs` 并挂载至 `scripts/run-tests.cjs`（同步登记 `docs/testing-and-workflow.md` 切片锚点），在 `vm` 沙箱加载真实 `frontend/panel/vendor/pinyin-pro.js`，锁定标题-only 评分、全拼字首边界对齐、首字母按序匹配、命中排序权重、标题完整不截断无省略号与正文片段截取高亮规则。
+- 验证：`npm test`（46 个文件语法检查 + 16 个单测套件）全量通过。

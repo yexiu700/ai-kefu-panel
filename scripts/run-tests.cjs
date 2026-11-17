@@ -25,6 +25,7 @@ const NODE_UNIT_SUITES = [
   'scripts/unit-snap-policy.cjs',
   'scripts/unit-ui-protocol.cjs',
   'scripts/unit-pinyin-lazy.cjs',
+  'scripts/unit-search.cjs',
   'scripts/unit-manager-lazy.cjs',
   'scripts/unit-feishu-sync.mjs',
   'scripts/unit-feishu-config.cjs',
