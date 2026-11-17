@@ -48,7 +48,7 @@
 
 - **为什么：** 每次按键都对当前范围全部标题打分并重写列表 HTML。公司库同步下来以后，边打字边搜会顿。
 - **大小：** 小。输入停顿后再渲染，拼音缓存继续用现在的。不要改成搜索正文。
-- **状态：** 未做。
+- **状态：** 已完成（迭代 #7）。`frontend/panel/panel.js` 对 `#q` 输入做 90ms 防抖合并并跳过中文输入法 `compositionstart`~`compositionend` 中间态整表重绘；清空搜索（`×` / `Escape` / 删空）立即刷新；按 `Enter`、方向键、`Alt+1..9` 时先同步 `flushSearch()` 再取 `S.rows`，确保盲打秒回车绝不命中旧行；搜索规则保持只搜标题不变。
 
 ### 8. 常用区整行点击忽略「只填入」
 
@@ -111,3 +111,8 @@
 
 - 完成第 6 项：新增 `scripts/unit-search.cjs` 并挂载至 `scripts/run-tests.cjs`（同步登记 `docs/testing-and-workflow.md` 切片锚点），在 `vm` 沙箱加载真实 `frontend/panel/vendor/pinyin-pro.js`，锁定标题-only 评分、全拼字首边界对齐、首字母按序匹配、命中排序权重、标题完整不截断无省略号与正文片段截取高亮规则。
 - 验证：`npm test`（46 个文件语法检查 + 16 个单测套件）全量通过。
+
+### #7
+
+- 完成第 7 项：`frontend/panel/panel.js` 的 `#q` 搜索输入改为 90ms 防抖合并，跳过中文输入法 `compositionstart`~`compositionend` 中间击键整表重绘；清除输入（`#clearQ` / `Escape` / 退格删空）保持零延迟刷新；键盘 `Enter`、上下方向键、`Alt+1..9` 操作前同步执行 `flushSearch()`，确保快打秒回车绝不读取陈旧 `S.rows`。
+- 验证：在 `scripts/unit-search.cjs` 补充连续打字防抖、输入法合成防抖、秒按回车同步刷新与清空即刻重绘单测，`npm test` 全量通过。
