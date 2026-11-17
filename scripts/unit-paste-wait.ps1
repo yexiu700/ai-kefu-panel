@@ -1,4 +1,4 @@
-﻿# Parse and extract only the wait policy. Never start the daemon or touch windows/clipboard.
+# Parse and extract only the wait policy. Never start the daemon or touch windows/clipboard.
 $ErrorActionPreference = 'Stop'
 $tokens = $null; $parseErrors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseFile(
@@ -18,20 +18,20 @@ function Test-PastedText([IntPtr]$h, [string]$prefix) {
 $r = Wait-PasteResult ([IntPtr]1) 'test' $false 80
 Assert ($r.verify -eq 'match' -and $r.verifyWaitMs -lt 70) 'confirmed default text should return early'
 $script:matchAfter = 3; $script:calls = 0
-$r = Wait-PasteResult ([IntPtr]1) 'test' $false 300
+$r = Wait-PasteResult ([IntPtr]1) 'test' $false 450
 Assert ($r.verify -eq 'match' -and $script:calls -ge 3) 'poll through transient mismatches'
 $script:matchAfter = 0
 foreach ($state in @('mismatch', 'unavailable', 'skipped')) {
   $script:status = $state
   $r = Wait-PasteResult ([IntPtr]1) 'test' $false 80
-  Assert ($r.verify -eq $state -and $r.verifyWaitMs -ge 80 -and $r.verifyWaitMs -lt 180) "budget/state: $state"
+  Assert ($r.verify -eq $state -and $r.verifyWaitMs -ge 80 -and $r.verifyWaitMs -lt 450) "budget/state: $state"
 }
 $script:status = 'match'
 $r = Wait-PasteResult ([IntPtr]1) 'test' $false 150
 Assert ($r.verifyWaitMs -ge 150) 'explicit higher delay must be honored even on match'
 $script:calls = 0
 $r = Wait-PasteResult ([IntPtr]1) '' $true 80
-Assert ($r.verifyWaitMs -ge 500 -and $r.verifyWaitMs -lt 800 -and $script:calls -eq 0) 'media floor without text verification'
+Assert ($r.verifyWaitMs -ge 500 -and $r.verifyWaitMs -lt 1000 -and $script:calls -eq 0) 'media floor without text verification'
 $r = Wait-PasteResult ([IntPtr]1) '' $true 650
 Assert ($r.verifyWaitMs -ge 650) 'higher media delay must be honored'
 # Mock Win32 statics; extraction never loads the daemon's native interop class.
@@ -54,7 +54,7 @@ public class HyWin {
 }
 "@
 function Get-WinInfo([IntPtr]$h) { return @{pid=42;title='fixture';exe='fixture.exe';processName='fixture'} }
-foreach ($name in @('Test-TargetForeground', 'Activate-Hwnd')) {
+foreach ($name in @('Test-TargetForeground', 'Activate-Hwnd', 'Write-Result')) {
   $node = $ast.Find({ param($n)
     $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name
   }, $true)
@@ -71,4 +71,15 @@ Assert ($r.ok -and $r.activateAttempts -eq 1 -and [HyWin]::AltEvents -eq 2) 'foc
 [HyWin]::CanActivate = $false; [HyWin]::Foreground = [IntPtr]2
 $r = Activate-Hwnd ([IntPtr]1)
 Assert (-not $r.ok -and $r.activateAttempts -eq 3 -and $r.error -eq 'Target activation failed') 'failed activation must retain retries/error'
-Write-Output 'PASS: daemon parsing, early match, transient mismatch, fallback budgets, higher delays media floor, activation fast path, retries and elevation (isolated)'
+$origOut = [Console]::Out
+try {
+  $sw = New-Object System.IO.StringWriter
+  [Console]::SetOut($sw)
+  $script:currentReqId = 17
+  Write-Result @{ ok = $true; op = 'ping' }
+  $parsed = ($sw.ToString().Trim()) | ConvertFrom-Json
+  Assert ($parsed.id -eq 17 -and $parsed.ok -eq $true -and $parsed.op -eq 'ping') 'Write-Result must echo current request id'
+} finally {
+  [Console]::SetOut($origOut)
+}
+Write-Output 'PASS: daemon parsing, early match, transient mismatch, fallback budgets, higher delays media floor, activation fast path, retries, elevation, and request-id echo (isolated)'

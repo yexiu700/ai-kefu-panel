@@ -104,7 +104,7 @@
 
 ## 4. `win32-daemon.ps1` 标准输入输出协议
 
-`electron/win32.js` 与 `electron/win32-daemon.ps1` 通过 UTF-8 单行 JSON 通信（当前为严格一问一答 FIFO 队列，**新增操作必须保证每次请求恰好输出一行 JSON**）：
+`electron/win32.js` 与 `electron/win32-daemon.ps1` 通过 UTF-8 单行 JSON 通信（每个请求自动附带递增数字 `id`，`Write-Result` 原样回传 `id` 供 `win32.js` 精确匹配并隔离超时迟到/重复输出包；**新增操作仍须保证每次请求通过 `Write-Result` 输出单行 JSON**）：
 
 | `op` | 请求字段 | 响应关键字段 |
 | --- | --- | --- |

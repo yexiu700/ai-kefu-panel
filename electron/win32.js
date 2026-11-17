@@ -71,15 +71,27 @@ function ensureDaemon() {
           if (!line) continue
           let msg
           try { msg = JSON.parse(line) } catch { continue }
-          // FIFO: one request → one response
-          const first = pending.keys().next()
-          if (!first.done) {
-            const id = first.value
-            const entry = pending.get(id)
-            pending.delete(id)
-            entry.resolve(msg)
+          if (msg && typeof msg === 'object' && msg.id != null) {
+            const matchId = Number(msg.id)
+            const entry = pending.get(matchId)
+            if (entry) {
+              pending.delete(matchId)
+              const { id: _id, ...clean } = msg
+              entry.resolve(clean)
+            } else {
+              bus.emit('orphan', msg)
+            }
           } else {
-            bus.emit('orphan', msg)
+            // Fallback for unattributed lines (e.g. malformed request JSON before id is parsed)
+            const first = pending.keys().next()
+            if (!first.done) {
+              const id = first.value
+              const entry = pending.get(id)
+              pending.delete(id)
+              entry.resolve(msg)
+            } else {
+              bus.emit('orphan', msg)
+            }
           }
         }
       })
@@ -131,7 +143,7 @@ function request(payload, timeoutMs = 8000) {
       reject: (err) => { clearTimeout(timer); reject(err) },
     })
     try {
-      child.stdin.write(JSON.stringify(payload) + '\n')
+      child.stdin.write(JSON.stringify({ ...payload, id }) + '\n')
     } catch (e) {
       pending.delete(id)
       clearTimeout(timer)

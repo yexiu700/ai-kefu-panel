@@ -31,6 +31,7 @@ const NODE_UNIT_SUITES = [
   'scripts/unit-feishu-config.cjs',
   'scripts/unit-media.cjs',
   'scripts/unit-hotkeys.cjs',
+  'scripts/unit-win32-rpc.cjs',
 ]
 
 const WIN_POWERSHELL_SUITES = [
