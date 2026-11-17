@@ -1,4 +1,4 @@
-# Parse and extract only the wait policy. Never start the daemon or touch windows/clipboard.
+﻿# Parse and extract only the wait policy. Never start the daemon or touch windows/clipboard.
 $ErrorActionPreference = 'Stop'
 $tokens = $null; $parseErrors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseFile(

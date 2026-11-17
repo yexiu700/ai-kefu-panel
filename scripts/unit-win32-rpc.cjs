@@ -133,8 +133,15 @@ async function main() {
   assert.equal(clipRes.clipboardSequence, 42)
   assert.equal('id' in clipRes, false, 'transport request id should be stripped from resolved payload')
 
-  // 3. Verify win32-daemon.ps1 echoes request id in Write-Result
-  const psSource = fs.readFileSync(path.resolve(__dirname, '../electron/win32-daemon.ps1'), 'utf8')
+  // 3. Verify win32-daemon.ps1 preserves UTF-8 BOM (required by Windows PowerShell 5.1) and echoes request id
+  const psPath = path.resolve(__dirname, '../electron/win32-daemon.ps1')
+  const psBytes = fs.readFileSync(psPath)
+  assert.equal(
+    psBytes[0] === 0xef && psBytes[1] === 0xbb && psBytes[2] === 0xbf,
+    true,
+    'electron/win32-daemon.ps1 MUST start with UTF-8 BOM (EF BB BF) for Windows PowerShell 5.1 compatibility',
+  )
+  const psSource = psBytes.toString('utf8')
   assert.match(psSource, /\$script:currentReqId/, 'win32-daemon.ps1 must track current request id')
   assert.match(psSource, /\$req\.id/, 'win32-daemon.ps1 must read $req.id from incoming JSON')
 

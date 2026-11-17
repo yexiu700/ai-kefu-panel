@@ -1,4 +1,4 @@
-# Long-lived Win32 helper for AI客服壳. One line of JSON in → one line of JSON out.
+﻿# Long-lived Win32 helper for AI客服壳. One line of JSON in → one line of JSON out.
 $ErrorActionPreference = 'Stop'
 # Load once before the warm ping, keeping assembly loading off the paste path.
 Add-Type -AssemblyName System.Windows.Forms
