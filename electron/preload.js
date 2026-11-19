@@ -110,7 +110,7 @@ function convertFileSrc(filePath, protocol = 'asset') {
   if (typeof filePath === 'string' && (filePath.startsWith('http://') || filePath.startsWith('https://') || filePath.startsWith('data:'))) {
     return filePath
   }
-  return `huiyou-media://localhost/?p=${encodeURIComponent(String(filePath))}`
+  return `aikefu-media://localhost/?p=${encodeURIComponent(String(filePath))}`
 }
 
 const internals = {
@@ -129,7 +129,7 @@ const internals = {
 try {
   contextBridge.exposeInMainWorld('__TAURI_INTERNALS__', internals)
   contextBridge.exposeInMainWorld('isTauri', true)
-  contextBridge.exposeInMainWorld('__HUIYOU_SHELL__', { label: windowLabel, version: require('../package.json').version })
+  contextBridge.exposeInMainWorld('__AIKEFU_SHELL__', { label: windowLabel, version: require('../package.json').version })
 } catch (e) {
   // contextIsolation disabled fallback
   window.__TAURI_INTERNALS__ = internals

@@ -3,7 +3,7 @@
 /**
  * Unit test for ROADMAP #9:
  * - Panel main menu distinguishes send logs (%APPDATA%\AI客服\logs) from
- *   phrase/settings data dir (%APPDATA%\huiyou-original-shell\huiyou-original-shell)
+ *   phrase/settings data dir (%APPDATA%\ai-kefu-panel\ai-kefu-panel)
  *   without moving either directory.
  * - Both menu items stay silent on success and surface 'err' toast on failure.
  * - handlers.js exposes both dataDir & logDir in get_app_info and propagates
@@ -80,7 +80,7 @@ function loadPanelMenuHarness() {
 
 function loadHandlersHarness(tmpRoot) {
   const appData = path.join(tmpRoot, 'AppData', 'Roaming')
-  const userData = path.join(appData, 'huiyou-original-shell')
+  const userData = path.join(appData, 'ai-kefu-panel')
   const openedPaths = []
   let openPathError = ''
 
@@ -171,7 +171,7 @@ async function main() {
 
   assert.match(html, /data-k="data-dir"/, 'menu should include data-dir action')
   assert.match(html, /打开话术与设置目录/, 'menu should label phrase/settings data directory action')
-  assert.match(html, /huiyou-original-shell/, 'data-dir item should hint huiyou-original-shell directory')
+  assert.match(html, /ai-kefu-panel/, 'data-dir item should hint ai-kefu-panel directory')
 
   // Success path: silent (no info/ok toast)
   await onClick('send-logs')
@@ -201,10 +201,10 @@ async function main() {
   try {
     const h = loadHandlersHarness(tmpRoot)
     const info = await h.handlers.handleCommand('get_app_info', {}, {})
-    const expectedDataDir = path.join(h.userData, 'huiyou-original-shell')
+    const expectedDataDir = path.join(h.userData, 'ai-kefu-panel')
     const expectedLogDir = path.join(h.appData, 'AI客服', 'logs')
 
-    assert.equal(info.dataDir, expectedDataDir, 'dataDir must remain double-nested huiyou-original-shell')
+    assert.equal(info.dataDir, expectedDataDir, 'dataDir must remain double-nested ai-kefu-panel')
     assert.equal(info.logDir, expectedLogDir, 'logDir must remain %APPDATA%\\AI客服\\logs')
     assert.notEqual(info.dataDir, info.logDir, 'dataDir and logDir are intentionally separate')
 

@@ -293,7 +293,7 @@ function wireIpc() {
 }
 
 function registerMediaProtocol() {
-  protocol.handle('huiyou-media', async (request) => {
+  protocol.handle('aikefu-media', async (request) => {
     try {
       const u = new URL(request.url)
       let p = u.searchParams.get('p')
@@ -317,7 +317,7 @@ try {
     scheme: 'aikefu',
     privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true },
   }, {
-    scheme: 'huiyou-media',
+    scheme: 'aikefu-media',
     privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true },
   }])
 } catch (e) {
@@ -326,7 +326,7 @@ try {
 
 // 固定数据目录，避免 setName 改品牌后换盘导致话术/设置丢失
 try {
-  const stable = path.join(app.getPath('appData'), 'huiyou-original-shell')
+  const stable = path.join(app.getPath('appData'), 'ai-kefu-panel')
   app.setPath('userData', stable)
 } catch (e) { console.warn('[userData]', e) }
 

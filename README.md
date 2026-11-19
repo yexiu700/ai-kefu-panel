@@ -138,8 +138,8 @@ npm start
 
 可在管理窗口的 AI 设置中填写网关地址、模型与 API Key，或通过以下任一本机方式提供密钥（优先级从高到低）：
 
-1. 系统环境变量：`HUIYOU_LLM_API_KEY`（或 `NEXTOP_LLM_API_KEY`）
-2. 本机密钥文件：`%USERPROFILE%\.huiyou\llm_api_key`（纯文本单行 Key）
+1. 系统环境变量：`AIKEFU_LLM_API_KEY`
+2. 本机密钥文件：`%USERPROFILE%\.aikefu\llm_api_key`（纯文本单行 Key）
 
 ---
 
@@ -148,7 +148,7 @@ npm start
 所有话术、媒体与日志均保存在本机，面板右上角 `≡` 菜单提供两个独立入口一键直达：
 
 - **话术与设置目录**（菜单「打开话术与设置目录」）：
-  `%APPDATA%\huiyou-original-shell\huiyou-original-shell\`（含 `library.json`、`settings.json`、`media\`、`backups\`）
+  `%APPDATA%\ai-kefu-panel\ai-kefu-panel\`（含 `library.json`、`settings.json`、`media\`、`backups\`）
 - **发送诊断日志**（菜单「打开发送日志」）：
   `%APPDATA%\AI客服\logs\send-YYYYMMDD.log`（记录每次激活、耗时、UIA 回读校验状态与未确认原因，单文件超 5 MB 自动轮转）
 
@@ -161,7 +161,7 @@ npm start
 仓库内置零 GUI 依赖的跨平台沙箱单测体系与双平台 CI，详见以下文档：
 
 - **[`AGENTS.md`](./AGENTS.md)**：项目结构、任务寻址表、核心业务不变量与修改红线。
-- **[`docs/architecture.md`](./docs/architecture.md)**：双前端架构、自定义协议（`aikefu://` / `huiyou-media://`）、Koffi 快照与 PowerShell 守护进程设计。
+- **[`docs/architecture.md`](./docs/architecture.md)**：双前端架构、自定义协议（`aikefu://` / `aikefu-media://`）、Koffi 快照与 PowerShell 守护进程设计。
 - **[`docs/ipc-contracts.md`](./docs/ipc-contracts.md)**：IPC 全量命令/事件契约与防崩返回结构。
 - **[`docs/testing-and-workflow.md`](./docs/testing-and-workflow.md)**：三层测试金字塔、源码切片锚点与 Windows 实机手测清单。
 

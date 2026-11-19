@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Stop'
 $scriptPath = Join-Path $PSScriptRoot 'import-feishu-config.ps1'
 $testDir = Join-Path $env:TEMP ('ai-kefu-feishu-test-' + [guid]::NewGuid().ToString('N'))
 $target = Join-Path $testDir 'nested\feishu.env'
@@ -20,13 +20,13 @@ try {
     Assert ($result.Code -eq 0) '参数导入失败'
     $content = [IO.File]::ReadAllText($target)
     Assert ($content.Contains('AIKEFU_FEISHU_APP_SECRET=' + $secret1)) '密钥未保存'
-    [IO.File]::AppendAllText($target, "# 保留注释`r`nOTHER_KEY=keep-me`r`nHUIYOU_FEISHU_APP_ID=old-id`r`nHUIYOU_FEISHU_APP_SECRET=old-secret`r`nAIKEFU_FEISHU_OVERSEAS_TABLE_ID=keep-overseas`r`n")
-    [IO.File]::WriteAllText($source, "export HUIYOU_FEISHU_APP_ID='file-id'`r`nAIKEFU_FEISHU_APP_SECRET=`"$secret2`"`r`nAIKEFU_FEISHU_DOMESTIC_BASE_TOKEN=domestic-test`r`nHUIYOU_FEISHU_BASE_TOKEN=must-not-import`r`n")
+    [IO.File]::AppendAllText($target, "# 保留注释`r`nOTHER_KEY=keep-me`r`nAIKEFU_FEISHU_APP_ID=old-id`r`nAIKEFU_FEISHU_APP_SECRET=old-secret`r`nAIKEFU_FEISHU_OVERSEAS_TABLE_ID=keep-overseas`r`n")
+    [IO.File]::WriteAllText($source, "export AIKEFU_FEISHU_APP_ID='file-id'`r`nAIKEFU_FEISHU_APP_SECRET=`"$secret2`"`r`nAIKEFU_FEISHU_DOMESTIC_BASE_TOKEN=domestic-test`r`nAIKEFU_FEISHU_BASE_TOKEN=must-not-import`r`n")
     $result = Invoke-Import @('-EnvFile', $source, '-TargetPath', $target)
     Assert ($result.Code -eq 0) '文件导入失败'
     $content = [IO.File]::ReadAllText($target)
-    foreach ($expected in @('# 保留注释', 'OTHER_KEY=keep-me', 'HUIYOU_FEISHU_APP_ID=file-id', 'AIKEFU_FEISHU_APP_ID=file-id', ('HUIYOU_FEISHU_APP_SECRET=' + $secret2), 'AIKEFU_FEISHU_DOMESTIC_BASE_TOKEN=domestic-test', 'AIKEFU_FEISHU_OVERSEAS_TABLE_ID=keep-overseas')) {
-        Assert ($content.Contains($expected)) '增量更新或旧别名同步不正确'
+    foreach ($expected in @('# 保留注释', 'OTHER_KEY=keep-me', 'AIKEFU_FEISHU_APP_ID=file-id', ('AIKEFU_FEISHU_APP_SECRET=' + $secret2), 'AIKEFU_FEISHU_DOMESTIC_BASE_TOKEN=domestic-test', 'AIKEFU_FEISHU_OVERSEAS_TABLE_ID=keep-overseas')) {
+        Assert ($content.Contains($expected)) '增量更新不正确'
     }
     Assert (-not $content.Contains('must-not-import')) '错误导入了未分地区配置'
     $before = $content

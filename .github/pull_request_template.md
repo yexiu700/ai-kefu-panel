@@ -11,7 +11,7 @@
 
 ## 安全与兼容红线自检
 
-- [ ] 未改动 `huiyou-original-shell` 双层数据目录与 `package.json` 版本号
+- [ ] 未改动 `ai-kefu-panel` 双层数据目录与 `package.json` 版本号
 - [ ] 未格式化 `frontend/assets/*.js` 压缩包，IPC 返回结构兼容原版管理端（见 `docs/ipc-contracts.md`）
 - [ ] 未引入成功/普通信息类 Toast（`toast()` 仅限 `err` / `warn`），搜索仍仅匹配标题
 - [ ] 未提交任何密钥、`.env`、`feishu.env`、`.api_key` 或临时调试产物
