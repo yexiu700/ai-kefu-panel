@@ -647,7 +647,7 @@
       item('paste-delay', '粘贴延迟', { sub: pasteDelay + ' ms（点击切换）' }) +
       item('restore-clipboard', '恢复剪贴板', { check: s.send?.restoreClipboard !== false }) +
       item('send-logs', '打开发送日志', { sub: 'AI客服\\logs', extra: 'title="%APPDATA%\\AI客服\\logs（与话术目录分开存放）"' }) +
-      item('data-dir', '打开话术与设置目录', { sub: 'huiyou-original-shell', extra: 'title="%APPDATA%\\huiyou-original-shell\\huiyou-original-shell"' }) +
+      item('data-dir', '打开话术与设置目录', { sub: 'ai-kefu-panel', extra: 'title="%APPDATA%\\ai-kefu-panel\\ai-kefu-panel"' }) +
       `<div class="sep"></div>` +
       item('top', '窗口置顶', { check: s.panel?.alwaysOnTop !== false }) +
       item('theme', '外观', { sub: { auto: '跟随系统', light: '浅色', dark: '深色' }[theme] || '跟随系统' }) +

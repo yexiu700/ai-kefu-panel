@@ -40,7 +40,7 @@ npm run dist
 | 面板搜索、高亮、常用区、列表交互、快捷键 | `frontend/panel/panel.js`、`frontend/index.html`、`frontend/panel/panel.css` | `npm test -- pinyin`、`npm test -- toast` |
 | 按软件发送方式 / 发送键（`appRules`） | `frontend/panel/send-rule.js`（面板与主进程共用）、`electron/handlers.js` | `npm test -- send-rule` |
 | 填入/发送队列、延迟、剪贴板恢复、发送日志 | `electron/send.js`、`electron/send-log.js`、`electron/win32-daemon.ps1` | `npm test -- send`（Windows 加跑 `npm run test:win`） |
-| 图片 / 附件导入、魔数校验、`CF_HDROP` 文件粘贴 | `electron/media.js`、`electron/send.js`、`electron/handlers.js`、`electron/main.js` (`huiyou-media://`) | `npm test -- media` |
+| 图片 / 附件导入、魔数校验、`CF_HDROP` 文件粘贴 | `electron/media.js`、`electron/send.js`、`electron/handlers.js`、`electron/main.js` (`aikefu-media://`) | `npm test -- media` |
 | 窗口自动跟随、锁定、贴靠吸附、轮询节流 | `electron/snap.js`、`electron/snap-policy.js`、`electron/win32-snapshot.js`、`electron/store.js` (`WIN_CHAT_APPS`) | `npm test -- snap` |
 | Win32 底层窗口/激活/UIA/图标 | `electron/win32.js`、`electron/win32-snapshot.js` (`koffi`)、`electron/win32-daemon.ps1` | `npm test -- send`（Windows 跑 `smoke-win32-snapshot.cjs`） |
 | 话术库/设置读写、归一化、内存缓存、备份恢复 | `electron/store.js`、`electron/handlers.js` | `npm test -- store` |
@@ -64,16 +64,16 @@ npm run dist
 
 ## 4. 数据放在哪（绝对不要改路径）
 
-主进程把 `userData` 固定指到 `%APPDATA%\huiyou-original-shell`，`store.getDataDir()` 再拼一层同名子目录。真实用户数据位于：
+主进程把 `userData` 固定指到 `%APPDATA%\ai-kefu-panel`，`store.getDataDir()` 再拼一层同名子目录。真实用户数据位于：
 
-- 话术库：`%APPDATA%\huiyou-original-shell\huiyou-original-shell\library.json`
-- 设置项：`%APPDATA%\huiyou-original-shell\huiyou-original-shell\settings.json`
+- 话术库：`%APPDATA%\ai-kefu-panel\ai-kefu-panel\library.json`
+- 设置项：`%APPDATA%\ai-kefu-panel\ai-kefu-panel\settings.json`
 - 媒体 / 表情 / 备份：同目录下的 `media\`、`stickers\`、`backups\`
 - 发送诊断日志：`%APPDATA%\AI客服\logs\send-YYYYMMDD.log`（与 `userData` 不在同一目录，排障时注意区分）
 - 飞书凭证：`%USERPROFILE%\.config\ai-kefu-panel\feishu.env`（绝不写入 `settings.json`，绝不进 Git）
-- 大模型密钥：环境变量 `HUIYOU_LLM_API_KEY` / `NEXTOP_LLM_API_KEY` 或 `%USERPROFILE%\.huiyou\llm_api_key`
+- 大模型密钥：环境变量 `AIKEFU_LLM_API_KEY` 或 `%USERPROFILE%\.aikefu\llm_api_key`
 
-**严禁「整理」双层嵌套目录，严禁更改 `huiyou-original-shell` 目录名，否则线上老用户升级后话术和设置会全部丢失。**
+**严禁「整理」双层嵌套目录，严禁更改 `ai-kefu-panel` 目录名，否则线上老用户升级后话术和设置会全部丢失。**
 
 ---
 
@@ -98,7 +98,7 @@ npm run dist
 
 ## 6. 不要做的事
 
-- 不要改 `huiyou-original-shell` 目录名，不要迁移用户数据目录，单测一律用 `os.tmpdir()` 临时目录。
+- 不要改 `ai-kefu-panel` 目录名，不要迁移用户数据目录，单测一律用 `os.tmpdir()` 临时目录。
 - 不要顺手升级 `electron`、`koffi`、`pinyin-pro` 或改动 `package.json` 的 `version`，除非任务明确要求。
 - 不要移除 `package.json -> build.asarUnpack` 中的 `electron/win32-daemon.ps1` 与 `koffi-win32-x64`。
 - 不要剥离 `electron/win32-daemon.ps1`（及含中文的 `.ps1` 脚本）文件头的 **UTF-8 BOM (`0xEF 0xBB 0xBF`)**，否则 Windows PowerShell 5.1 (`powershell.exe`) 会按 ANSI 代码页读取中文字符串导致语法解析失败。

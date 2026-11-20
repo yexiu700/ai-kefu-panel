@@ -20,7 +20,7 @@ if (!process.versions.electron) {
   app.setPath('userData', fs.mkdtempSync(path.join(os.tmpdir(), 'aikefu-protocol-smoke-')))
   app.disableHardwareAcceleration()
   app.on('window-all-closed', () => {})
-  protocol.registerSchemesAsPrivileged(['aikefu', 'huiyou-media'].map(scheme => ({
+  protocol.registerSchemesAsPrivileged(['aikefu', 'aikefu-media'].map(scheme => ({
     scheme, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true },
   })))
   let win
@@ -29,7 +29,7 @@ if (!process.versions.electron) {
     const requests = []
     const serve = createUiHandler(path.join(root, 'frontend'), url => net.fetch(url))
     protocol.handle('aikefu', request => { requests.push(new URL(request.url).pathname); return serve(request) })
-    protocol.handle('huiyou-media', () => new Response('media-fixture'))
+    protocol.handle('aikefu-media', () => new Response('media-fixture'))
     const settings = { theme: 'light', panel: {}, send: {}, hotkeys: {} }
     ipcMain.handle('tauri-invoke', (_event, { cmd }) => {
       if (cmd === 'smoke_echo') return 'ipc-ok'
@@ -50,7 +50,7 @@ if (!process.versions.electron) {
       const ipc = await T.invoke('smoke_echo');
       const json = await (await fetch('/panel/default-company-library.json')).json();
       const css = await fetch('/brand-theme.css');
-      const media = await (await fetch('huiyou-media://localhost/?p=fixture')).text();
+      const media = await (await fetch('aikefu-media://localhost/?p=fixture')).text();
       await new Promise((resolve, reject) => {
         const end = performance.now() + 6000;
         function check() {

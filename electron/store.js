@@ -133,7 +133,7 @@ function ensureDir(p) {
 }
 
 function getDataDir() {
-  const dir = path.join(app.getPath('userData'), 'huiyou-original-shell')
+  const dir = path.join(app.getPath('userData'), 'ai-kefu-panel')
   ensureDir(dir)
   ensureDir(path.join(dir, 'backups'))
   ensureDir(path.join(dir, 'media'))
@@ -253,7 +253,7 @@ function settingsStamp(p) {
 
 function loadSettings() {
   // Avoid recreating directories and reparsing JSON on every snap tick.
-  const p = path.join(app.getPath('userData'), 'huiyou-original-shell', 'settings.json')
+  const p = path.join(app.getPath('userData'), 'ai-kefu-panel', 'settings.json')
   const stamp = settingsStamp(p)
   if (settingsCache?.path === p && settingsCache.stamp === stamp) {
     return structuredClone(settingsCache.value)

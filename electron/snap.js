@@ -24,7 +24,7 @@ function matchesChatApp(exe, chatApps) {
 
 function isOurWindow(title) {
   const t = String(title || '')
-  return t.includes('AI客服') || t.includes('huiyou-original-shell')
+  return t.includes('AI客服') || t.includes('ai-kefu-panel')
 }
 
 function computeSnap(rect, panelW, panelH, side, gap = 0) {

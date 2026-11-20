@@ -113,14 +113,14 @@ await test('配置优先级：进程变量及别名优先，文件次之，设�
   try {
     fs.existsSync = file => file === fakePath ? true : exists(file)
     fs.readFileSync = (file, ...args) => file === fakePath
-      ? '# offline fixture\nHUIYOU_FEISHU_APP_ID="file-id"\nAIKEFU_FEISHU_APP_SECRET=\'file-secret\'\n'
+      ? '# offline fixture\nAIKEFU_FEISHU_APP_ID="file-id"\nAIKEFU_FEISHU_APP_SECRET=\'file-secret\'\n'
       : read(file, ...args)
     const settings = { feishuAppId: 'settings-id', feishuAppSecret: 'settings-secret', feishuDomesticTableId: 'settings-table' }
     const fromFile = sync.resolveConfig(settings, {}, 'domestic', fakePath)
     assert.equal(fromFile.appId, 'file-id')
     assert.equal(fromFile.appSecret, 'file-secret')
     assert.equal(fromFile.tableId, 'settings-table')
-    const fromEnv = sync.resolveConfig(settings, { HUIYOU_FEISHU_APP_ID: 'env-id', AIKEFU_FEISHU_APP_ID: 'alias-id', AIKEFU_FEISHU_APP_SECRET: 'alias-secret', AIKEFU_FEISHU_DOMESTIC_BASE_TOKEN: 'alias-base' }, 'domestic', fakePath)
+    const fromEnv = sync.resolveConfig(settings, { AIKEFU_FEISHU_APP_ID: 'env-id', AIKEFU_FEISHU_APP_SECRET: 'alias-secret', AIKEFU_FEISHU_DOMESTIC_BASE_TOKEN: 'alias-base' }, 'domestic', fakePath)
     assert.equal(fromEnv.appId, 'env-id')
     assert.equal(fromEnv.appSecret, 'alias-secret')
     assert.equal(fromEnv.baseToken, 'alias-base')
@@ -198,10 +198,10 @@ await test('双区域预设、记忆区域及区域覆盖隔离', () => {
   assert.equal(sync.resolveConfig({ feishuLibraryRegion: 'overseas' }, {}, undefined, missing).region, 'overseas')
   assert.equal(sync.resolveConfig({ feishuLibraryRegion: 'overseas' }, {}, 'domestic', missing).region, 'domestic')
   const env = {
-    HUIYOU_FEISHU_APP_ID: 'shared-id', AIKEFU_FEISHU_APP_SECRET: 'shared-secret',
-    HUIYOU_FEISHU_DOMESTIC_BASE_TOKEN: 'domestic-env', AIKEFU_FEISHU_DOMESTIC_TABLE_ID: 'domestic-table',
-    AIKEFU_FEISHU_OVERSEAS_BASE_TOKEN: 'overseas-alias', HUIYOU_FEISHU_OVERSEAS_TABLE_ID: 'overseas-table',
-    HUIYOU_FEISHU_BASE_TOKEN: 'legacy-must-not-leak', HUIYOU_FEISHU_TABLE_ID: 'legacy-table',
+    AIKEFU_FEISHU_APP_ID: 'shared-id', AIKEFU_FEISHU_APP_SECRET: 'shared-secret',
+    AIKEFU_FEISHU_DOMESTIC_BASE_TOKEN: 'domestic-env', AIKEFU_FEISHU_DOMESTIC_TABLE_ID: 'domestic-table',
+    AIKEFU_FEISHU_OVERSEAS_BASE_TOKEN: 'overseas-alias', AIKEFU_FEISHU_OVERSEAS_TABLE_ID: 'overseas-table',
+    AIKEFU_FEISHU_BASE_TOKEN: 'legacy-must-not-leak', AIKEFU_FEISHU_TABLE_ID: 'legacy-table',
   }
   for (const region of ['domestic', 'overseas']) {
     const cfg = sync.resolveConfig({}, env, region, missing)

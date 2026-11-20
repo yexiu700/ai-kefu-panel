@@ -6,7 +6,7 @@ const temp=fs.mkdtempSync(path.join(os.tmpdir(),'ai-media-ui-028-'))
 app.setPath('userData',temp)
 // Configuration status must also be isolated when visiting the settings tab.
 os.homedir=()=>temp
-protocol.registerSchemesAsPrivileged([{scheme:'huiyou-media',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true}}])
+protocol.registerSchemesAsPrivileged([{scheme:'aikefu-media',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true}}])
 app.whenReady().then(async()=>{
  const store=require(path.join(root,'electron/store.js'))
  const {handleCommand}=require(path.join(root,'electron/handlers.js'))
@@ -16,7 +16,7 @@ app.whenReady().then(async()=>{
  dialog.showOpenDialog=async()=>({canceled:false,filePaths:[input]})
  store.saveLibrary({version:1,groups:[{id:'test',name:'测试分组',scope:'private',phrases:[]}],stickers:[]},{skipBackup:true})
  ipcMain.handle('tauri-invoke',async(_e,p)=>{if(['import_image','import_file'].includes(p.cmd))await new Promise(r=>setTimeout(r,700));return handleCommand(p.cmd,p.args,{})})
- protocol.handle('huiyou-media',req=>{const n=new URL(req.url).searchParams.get('p');return net.fetch(require('url').pathToFileURL(path.isAbsolute(n)?n:path.join(store.mediaDir(),n)).href)})
+ protocol.handle('aikefu-media',req=>{const n=new URL(req.url).searchParams.get('p');return net.fetch(require('url').pathToFileURL(path.isAbsolute(n)?n:path.join(store.mediaDir(),n)).href)})
  const server=http.createServer((req,res)=>{const file=path.join(root,'frontend',new URL(req.url,'http://localhost').pathname);res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');res.end(fs.readFileSync(file))}).listen(0,'127.0.0.1')
  await new Promise(r=>server.once('listening',r))
  const win=new BrowserWindow({show:false,width:1100,height:900,webPreferences:{preload:path.join(root,'electron/preload.js'),sandbox:false,additionalArguments:['--window-label=manager']}})

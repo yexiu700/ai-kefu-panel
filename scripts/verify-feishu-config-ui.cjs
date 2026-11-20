@@ -7,7 +7,7 @@ const root = process.argv[2] ? path.resolve(process.argv[2]) : path.resolve(__di
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-feishu-ui-029-'))
 os.homedir = () => temp
 app.setPath('userData', temp)
-for (const prefix of ['HUIYOU_FEISHU_', 'AIKEFU_FEISHU_']) {
+for (const prefix of ['AIKEFU_FEISHU_']) {
   for (const name of ['APP_ID', 'APP_SECRET', 'DOMESTIC_BASE_TOKEN', 'DOMESTIC_TABLE_ID', 'OVERSEAS_BASE_TOKEN', 'OVERSEAS_TABLE_ID']) delete process.env[prefix + name]
 }
 app.whenReady().then(async () => {
@@ -55,7 +55,7 @@ app.whenReady().then(async () => {
     await waitFor(() => run(`!document.querySelector('[data-testid="import-feishu-config"]').disabled`))
   }
   fs.mkdirSync(path.dirname(target), { recursive: true })
-  fs.writeFileSync(target, '# preserve\nOTHER=keep\nHUIYOU_FEISHU_APP_SECRET=old\nAIKEFU_FEISHU_OVERSEAS_TABLE_ID=keep\n')
+  fs.writeFileSync(target, '# preserve\nOTHER=keep\nAIKEFU_FEISHU_APP_SECRET=old\nAIKEFU_FEISHU_OVERSEAS_TABLE_ID=keep\n')
   fs.writeFileSync(source, `AIKEFU_FEISHU_APP_ID=${appId}\nAIKEFU_FEISHU_APP_SECRET=${secret}\n`)
   await clickImport(); assert.equal(lastResponse.ok, true)
   assert.ok((await run('document.body.innerText')).includes('当前进程可立即同步'))

@@ -6,9 +6,9 @@
 
 ## 1. 架构演进与「Tauri-on-Electron」双前端设计
 
-本项目源自原版 Tauri 桌面端（历史内部代号 `huiyou`），现运行在纯 Node/Electron 壳（`electron/`）之上：
+本项目由原版 Tauri 桌面端演进而来，现运行在纯 Node/Electron 壳（`electron/`）之上：
 
-1. **Tauri 兼容桥（`electron/preload.js`）**：向渲染进程注入 `window.__TAURI_INTERNALS__`、`window.isTauri = true`、`window.__HUIYOU_SHELL__`，并将 `[data-tauri-drag-region]` 映射为 Electron 的 `-webkit-app-region: drag`。
+1. **Tauri 兼容桥（`electron/preload.js`）**：向渲染进程注入 `window.__TAURI_INTERNALS__`、`window.isTauri = true`、`window.__AIKEFU_SHELL__`，并将 `[data-tauri-drag-region]` 映射为 Electron 的 `-webkit-app-region: drag`。
 2. **双前端共存（严禁改错入口）**：
    - **日常侧边面板（主力迭代区）**：`frontend/index.html` → 加载 `frontend/panel/send-rule.js` 与 `frontend/panel/panel.js`（原生 JS，无构建步骤，直接改源码生效）。拼音库 `frontend/panel/vendor/pinyin-pro.js` 在首屏渲染完成后通过双 `requestAnimationFrame` + `requestIdleCallback` 延迟加载。
    - **管理窗口（编译产物，谨慎微调）**：`frontend/manager.html` → 加载 `frontend/assets/manager-DBuMfWSZ.js`、`GuideSpotlight-Bc_qirTp.js`，并在切换到「模板库」时按需懒加载 `TemplatesPage-BlVodupk.js` + CSS。仓库内**不含**管理端原始 Vue 源码，因此不要格式化压缩包，主进程命令返回结构必须严格兼容原版前端。
@@ -25,7 +25,7 @@ flowchart TB
   end
 
   subgraph Preload["预加载桥 (electron/preload.js)"]
-    TauriShim["window.__TAURI_INTERNALS__<br/>tauri-invoke / tauri-event / tauri-window<br/>huiyou-media:// URL 转换"]
+    TauriShim["window.__TAURI_INTERNALS__<br/>tauri-invoke / tauri-event / tauri-window<br/>aikefu-media:// URL 转换"]
   end
 
   subgraph Main["Electron 主进程 (electron/)"]
@@ -69,24 +69,24 @@ flowchart TB
 | 协议 | 处理位置 | 用途与安全规则 |
 | --- | --- | --- |
 | `aikefu://ui/<path>` | `electron/ui-protocol.js` | 加载 `frontend/` 下所有 HTML/JS/CSS/JSON/字体资源。强制校验 `host === 'ui'`、仅允许 `GET`/`HEAD`、拒绝 `\` / `:` / `\0` / `..` 及目录越界访问（返回 `403`）。 |
-| `huiyou-media://localhost/?p=<name_or_path>` | `electron/main.js` (`registerMediaProtocol`) | 渲染话术图片缩略图与附件读取。新数据保存纯文件名（在 `media/` 与 `stickers/` 下查找并校验 `p === path.basename(p)`），同时兼容历史数据中的本机绝对路径。 |
+| `aikefu-media://localhost/?p=<name_or_path>` | `electron/main.js` (`registerMediaProtocol`) | 渲染话术图片缩略图与附件读取。新数据保存纯文件名（在 `media/` 与 `stickers/` 下查找并校验 `p === path.basename(p)`），同时兼容历史数据中的本机绝对路径。 |
 
 ---
 
 ## 3. 本机文件与数据目录契约（严禁改动路径）
 
 > [!CAUTION]
-> 已安装用户的真实资产依赖以下精确路径，**禁止**重命名 `huiyou-original-shell`、禁止消除双层嵌套目录、禁止迁移存储位置。
+> 已安装用户的真实资产依赖以下精确路径，**禁止**重命名 `ai-kefu-panel`、禁止消除双层嵌套目录、禁止迁移存储位置。
 
 | 数据项 | Windows 实际路径 | 读写模块 | 说明 |
 | --- | --- | --- | --- |
-| 话术库 | `%APPDATA%\huiyou-original-shell\huiyou-original-shell\library.json` | `electron/store.js` | 原子写入（`.tmp` + `renameSync`）；保存前自动备份（`origin === 'panel-usage'` 仅记次数时跳过备份）。 |
-| 应用设置 | `%APPDATA%\huiyou-original-shell\huiyou-original-shell\settings.json` | `electron/store.js` | 带 `mtimeMs:ctimeMs:size` 内存缓存，避免吸附轮询每 tick 读盘；返回 `structuredClone` 防止外部篡改缓存。 |
-| 话术备份 | `%APPDATA%\huiyou-original-shell\huiyou-original-shell\backups\library-*.json` | `electron/store.js` | 默认保留最近 20 份（飞书同步前调用 `backupNow(Infinity)` 全量保留）。 |
-| 本地媒体 / 表情 | `%APPDATA%\huiyou-original-shell\huiyou-original-shell\{media,stickers}\` | `electron/media.js` | 文件名格式 `<UUID>-image.<ext>` 或 `<UUID>-<安全原文件名>`。 |
+| 话术库 | `%APPDATA%\ai-kefu-panel\ai-kefu-panel\library.json` | `electron/store.js` | 原子写入（`.tmp` + `renameSync`）；保存前自动备份（`origin === 'panel-usage'` 仅记次数时跳过备份）。 |
+| 应用设置 | `%APPDATA%\ai-kefu-panel\ai-kefu-panel\settings.json` | `electron/store.js` | 带 `mtimeMs:ctimeMs:size` 内存缓存，避免吸附轮询每 tick 读盘；返回 `structuredClone` 防止外部篡改缓存。 |
+| 话术备份 | `%APPDATA%\ai-kefu-panel\ai-kefu-panel\backups\library-*.json` | `electron/store.js` | 默认保留最近 20 份（飞书同步前调用 `backupNow(Infinity)` 全量保留）。 |
+| 本地媒体 / 表情 | `%APPDATA%\ai-kefu-panel\ai-kefu-panel\{media,stickers}\` | `electron/media.js` | 文件名格式 `<UUID>-image.<ext>` 或 `<UUID>-<安全原文件名>`。 |
 | 发送诊断日志 | `%APPDATA%\AI客服\logs\send-YYYYMMDD.log` | `electron/send-log.js` | JSONL 格式，单文件超 5MB 轮转为 `.1`。仅记录 `textPreview`（前 40 字）与耗时/状态，不记录聊天窗隐私内容。 |
 | 飞书凭证配置 | `%USERPROFILE%\.config\ai-kefu-panel\feishu.env` | `electron/feishu-config.js` | 权限 `0o600` 临时文件 `fsync` 后原子替换。**绝不写入 `settings.json`**；IPC 与界面仅暴露脱敏 App ID。 |
-| LLM API Key | 环境变量 `HUIYOU_LLM_API_KEY` / `NEXTOP_LLM_API_KEY` 或 `%USERPROFILE%\.huiyou\llm_api_key` 等 | `electron/assist.js` + `llm.js` | 按环境变量 → 本地密钥文件候选列表顺序解析。 |
+| LLM API Key | 环境变量 `AIKEFU_LLM_API_KEY` 或 `%USERPROFILE%\.aikefu\llm_api_key` 等 | `electron/assist.js` + `llm.js` | 按环境变量 → 本地密钥文件候选列表顺序解析。 |
 | 默认公司话术种子 | `frontend/panel/default-company-library.json`（与 `data/default-company-library.json` 同内容） | `frontend/panel/panel.js` | 首次启动且公司话术数为 0 时自动灌入，或空状态点「导入默认公司话术」加载。若更新种子请同步两处或以 `frontend/panel/` 为准。 |
 
 ### 核心数据结构速览
@@ -147,7 +147,7 @@ flowchart TB
   - 输出强制跟随买家语言，面板支持主推回复 + 备选切换、二次编辑、`Ctrl+Enter` 发送，以及「＋ 收录为话术」（并入第一个 `private` 分组，自动清理历史遗留的 `AI 收录` 杂项分组）。
 - **飞书同步（`electron/feishu-sync.js` + `feishu-config.js`）**：
   - 支持 `domestic`（国内）与 `overseas`（海外）双主库预设，各区域 Base/Table 配置严格隔离不混用。
-  - 凭证优先级：进程环境变量（`HUIYOU_FEISHU_*` / `AIKEFU_FEISHU_*`） > `~/.config/ai-kefu-panel/feishu.env` > `settings.json` 旧字段。
+  - 凭证优先级：进程环境变量（`AIKEFU_FEISHU_*`） > `~/.config/ai-kefu-panel/feishu.env` > `settings.json` 旧字段。
   - 仅同步「归属」为公司（或空）且「内容」非空的行；同步落盘前重新读取最新本地库，**完整保留所有 `private` 分组与表情**，并按稳定 ID `feishu:<record_id>` 继承本地收藏与使用统计。
 
 ---

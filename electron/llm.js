@@ -147,7 +147,7 @@ async function callLlm(cfg, messages, opts = {}) {
 }
 
 function resolveApiKey(settingsKey, fileCandidates) {
-  const fromEnv = (process.env.HUIYOU_LLM_API_KEY || process.env.NEXTOP_LLM_API_KEY || '').trim()
+  const fromEnv = (process.env.AIKEFU_LLM_API_KEY || process.env.NEXTOP_LLM_API_KEY || '').trim()
   if (fromEnv) return fromEnv
   for (const p of fileCandidates || []) {
     try {

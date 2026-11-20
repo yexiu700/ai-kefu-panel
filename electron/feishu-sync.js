@@ -36,7 +36,7 @@ function resolveConfig(settings = {}, env = process.env, region, envPath = path.
             if (match) fileEnv[match[1]] = match[2].replace(/^(['"])(.*)\1$/, '$2');
         }
     }
-    const read = (key, setting, fallback = '') => env['HUIYOU_FEISHU_' + key] ?? env['AIKEFU_FEISHU_' + key] ?? fileEnv['HUIYOU_FEISHU_' + key] ?? fileEnv['AIKEFU_FEISHU_' + key] ?? settings[setting] ?? fallback;
+    const read = (key, setting, fallback = '') => env['AIKEFU_FEISHU_' + key] ?? fileEnv['AIKEFU_FEISHU_' + key] ?? settings[setting] ?? fallback;
     region = resolveRegion(region, settings);
     const prefix = region.toUpperCase() + '_';
     const settingPrefix = region === 'overseas' ? 'feishuOverseas' : 'feishuDomestic';

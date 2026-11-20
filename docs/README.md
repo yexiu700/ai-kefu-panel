@@ -5,7 +5,7 @@
 ## 核心参考文档
 
 1. **[`../AGENTS.md`](../AGENTS.md)**（必读入口）：项目定位、快速命令、任务寻址表、核心业务不变量与禁令红线。
-2. **[`architecture.md`](./architecture.md)**：Tauri-on-Electron 双前端架构、`aikefu://` 与 `huiyou-media://` 协议、本机存储路径与数据模型、Koffi 快照热路径与 PowerShell Win32 守护进程、ASAR 解包约束。
+2. **[`architecture.md`](./architecture.md)**：Tauri-on-Electron 双前端架构、`aikefu://` 与 `aikefu-media://` 协议、本机存储路径与数据模型、Koffi 快照热路径与 PowerShell Win32 守护进程、ASAR 解包约束。
 3. **[`ipc-contracts.md`](./ipc-contracts.md)**：`tauri-invoke` 全量命令入参/返回结构（含防止预编译管理端崩溃的强契约标注）、`tauri-event` 事件载荷、`win32-daemon.ps1` JSON 协议。
 4. **[`testing-and-workflow.md`](./testing-and-workflow.md)**：三层测试金字塔、`panel.js` / 压缩包的 `vm` 切片锚点清单、零依赖隔离单测模板、Windows 实机手测 Checklist。
 5. **[`../ROADMAP.md`](../ROADMAP.md)**：按真实客服痛点排序的待办迭代项与迭代日志。

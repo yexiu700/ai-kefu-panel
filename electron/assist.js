@@ -22,11 +22,10 @@ function idleState(message = null) {
 function keyCandidates() {
   const home = os.homedir()
   return [
-    path.join(home, '.huiyou', 'llm_api_key'),
-    path.join(home, '.config', 'huiyou', 'llm_api_key'),
+    path.join(home, '.aikefu', 'llm_api_key'),
+    path.join(home, '.config', 'ai-kefu-panel', 'llm_api_key'),
     path.join(store.getDataDir(), 'llm_api_key'),
     path.join(__dirname, '..', '.api_key'),
-    '/workspace/nextop-suggest-reply/.api_key',
   ]
 }
 
@@ -138,7 +137,7 @@ async function runLlmReply(question) {
     return setState({
       phase: 'error',
       question: context,
-      message: '未配置 API Key：请设环境变量 HUIYOU_LLM_API_KEY / NEXTOP_LLM_API_KEY，或写入 %USERPROFILE%\\.huiyou\\llm_api_key',
+      message: '未配置 API Key：请设环境变量 AIKEFU_LLM_API_KEY，或写入 %USERPROFILE%\\.aikefu\\llm_api_key',
       result: null,
     })
   }
@@ -168,8 +167,8 @@ ${knowledge}
   try {
     const raw = await callLlm(
       {
-        baseUrl: process.env.NEXTOP_LLM_BASE_URL || process.env.HUIYOU_LLM_BASE_URL || DEFAULT_BASE,
-        model: process.env.HUIYOU_LLM_MODEL || DEFAULT_MODEL,
+        baseUrl: process.env.AIKEFU_LLM_BASE_URL || process.env.NEXTOP_LLM_BASE_URL || DEFAULT_BASE,
+        model: process.env.AIKEFU_LLM_MODEL || DEFAULT_MODEL,
         apiKey,
         temperature: 0.35,
       },

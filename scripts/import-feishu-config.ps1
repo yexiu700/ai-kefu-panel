@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 导入 AI客服 的飞书同步配置，不显示密钥。
 .DESCRIPTION
@@ -22,8 +22,8 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
-# 写入当前别名，同时同步已经存在的旧别名，避免旧别名优先级更高而遮蔽新值。
-$prefixes = @('AIKEFU_FEISHU_', 'HUIYOU_FEISHU_')
+# 统一使用 AIKEFU_FEISHU_ 前缀
+$prefixes = @('AIKEFU_FEISHU_')
 $names = @('APP_ID', 'APP_SECRET', 'DOMESTIC_BASE_TOKEN', 'DOMESTIC_TABLE_ID', 'OVERSEAS_BASE_TOKEN', 'OVERSEAS_TABLE_ID')
 $values = @{}
 
@@ -49,7 +49,7 @@ try {
         }
         foreach ($name in $names) {
             # 与应用一致：旧别名优先；绝不导入不分地区的旧 Base/Table 配置。
-            foreach ($prefix in @($prefixes[1], $prefixes[0])) {
+            foreach ($prefix in $prefixes) {
                 if ($source.ContainsKey($prefix + $name)) { $values[$name] = $source[$prefix + $name]; break }
             }
         }

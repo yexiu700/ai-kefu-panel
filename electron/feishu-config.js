@@ -4,7 +4,7 @@ const path = require('node:path')
 const os = require('node:os')
 const { randomUUID } = require('node:crypto')
 
-const prefixes = ['HUIYOU_FEISHU_', 'AIKEFU_FEISHU_']
+const prefixes = ['AIKEFU_FEISHU_']
 const names = ['APP_ID', 'APP_SECRET', 'DOMESTIC_BASE_TOKEN', 'DOMESTIC_TABLE_ID', 'OVERSEAS_BASE_TOKEN', 'OVERSEAS_TABLE_ID']
 const defaultPath = () => path.join(os.homedir(), '.config', 'ai-kefu-panel', 'feishu.env')
 const assignment = /^\s*(?:export\s+)?([A-Z_]+)\s*=\s*(.*?)\s*$/
@@ -70,7 +70,7 @@ function merge(text, values) {
 }
 function status(targetPath = defaultPath(), env = process.env) {
   const file = fs.existsSync(targetPath) ? parse(fs.readFileSync(targetPath, 'utf8')) : {}
-  const read = name => env[prefixes[0] + name] ?? env[prefixes[1] + name] ?? file[prefixes[0] + name] ?? file[prefixes[1] + name] ?? ''
+  const read = name => env[prefixes[0] + name] ?? file[prefixes[0] + name] ?? ''
   const appId = read('APP_ID'), secretConfigured = !!read('APP_SECRET').trim()
   return { configured: !!appId.trim() && secretConfigured, appIdMasked: appId ? appId.slice(0, Math.min(4, Math.max(0, appId.length - 1))) + '…' : '', secretConfigured }
 }
