@@ -15,8 +15,38 @@ function acceleratorFromSetting(raw) {
     .replace(/\s*\+\s*/g, '+')
 }
 
+const MODIFIER_CANON = {
+  commandorcontrol: 'commandorcontrol',
+  cmdorctrl: 'commandorcontrol',
+  control: 'control',
+  ctrl: 'control',
+  alt: 'alt',
+  option: 'alt',
+  shift: 'shift',
+  command: 'command',
+  cmd: 'command',
+  super: 'command',
+  meta: 'command',
+}
+const MODIFIER_ORDER = ['commandorcontrol', 'control', 'alt', 'shift', 'command']
+
 function normalizeAcceleratorKey(acc) {
-  return String(acc || '').trim().toLowerCase()
+  const parts = String(acc || '').trim().toLowerCase().split('+').map((p) => p.trim()).filter(Boolean)
+  if (!parts.length) return ''
+  const mods = new Set()
+  const keys = []
+  for (const part of parts) {
+    const canon = MODIFIER_CANON[part]
+    if (canon) mods.add(canon)
+    else keys.push(part)
+  }
+  const orderedMods = MODIFIER_ORDER.filter((m) => mods.has(m))
+  return [...orderedMods, ...keys].join('+')
+}
+
+function scopesOverlap(appsA, appsB) {
+  if (!appsA || !appsA.length || !appsB || !appsB.length) return true
+  return appsA.some((a) => appsB.includes(a))
 }
 
 function isPhraseSendable(phrase) {
@@ -72,20 +102,29 @@ function createHotkeyManager(deps) {
     try { deps.globalShortcut.unregisterAll() } catch { /* ignore */ }
   }
 
-  function tryRegisterEntry(raw, label, handler, claimed, nextFailures, shouldRegisterOs = true) {
+  function recordClaim(claimed, key, entry) {
+    const list = claimed.get(key)
+    if (list) list.push(entry)
+    else claimed.set(key, [entry])
+  }
+
+  function tryRegisterEntry(raw, label, handler, claimed, osClaimed, nextFailures, shouldRegisterOs = true, scopeApps = null) {
     const trimmed = typeof raw === 'string' ? raw.trim() : ''
     if (!trimmed) return
     const acc = acceleratorFromSetting(trimmed)
     if (!acc) return
     const key = normalizeAcceleratorKey(acc)
-    if (claimed.has(key)) {
-      const owner = claimed.get(key)
+    const normalizedScope = Array.isArray(scopeApps) && scopeApps.length ? scopeApps : null
+    const existing = claimed.get(key) || []
+    const conflicting = existing.find((item) => scopesOverlap(item.apps, normalizedScope))
+    if (conflicting) {
+      const owner = conflicting.label
       const ownerText = owner.startsWith('话术「') ? owner : `「${owner}」`
       nextFailures.push({ hotkey: trimmed, reason: `与${ownerText}的热键冲突` })
       return
     }
-    if (!shouldRegisterOs) {
-      claimed.set(key, label)
+    if (!shouldRegisterOs || osClaimed.has(key)) {
+      recordClaim(claimed, key, { label, apps: normalizedScope })
       return
     }
     try {
@@ -93,7 +132,8 @@ function createHotkeyManager(deps) {
       if (ok === false) {
         nextFailures.push({ hotkey: trimmed, reason: '已被其他软件占用' })
       } else {
-        claimed.set(key, label)
+        osClaimed.add(key)
+        recordClaim(claimed, key, { label, apps: normalizedScope })
       }
     } catch (e) {
       console.warn('[hotkey] register failed', trimmed, e)
@@ -114,6 +154,7 @@ function createHotkeyManager(deps) {
     const hotkeys = settings.hotkeys || {}
     const nextFailures = []
     const claimed = new Map()
+    const osClaimed = new Set()
 
     const globalEntries = [
       { raw: hotkeys.togglePanel, label: '呼出/隐藏面板', handler: deps.onTogglePanel },
@@ -121,7 +162,7 @@ function createHotkeyManager(deps) {
       { raw: hotkeys.assist, label: '问 AI', handler: deps.onAssist },
     ]
     for (const entry of globalEntries) {
-      tryRegisterEntry(entry.raw, entry.label, entry.handler, claimed, nextFailures, true)
+      tryRegisterEntry(entry.raw, entry.label, entry.handler, claimed, osClaimed, nextFailures, true, null)
     }
 
     const library = deps.getLibrary?.()
@@ -140,8 +181,10 @@ function createHotkeyManager(deps) {
           `话术「${title}」`,
           () => deps.onTriggerPhrase?.(phraseId),
           claimed,
+          osClaimed,
           nextFailures,
           groupActive,
+          groupApps,
         )
       }
     }
