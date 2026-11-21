@@ -46,8 +46,12 @@ function createSnapshotBackend() {
       } finally { closeHandle(handle) }
     }
     // PowerShell can sometimes read ProcessName when querying the image path is
-    // denied. Let the bridge fall back rather than silently losing auto-bind.
-    if (pid && !processName) throw new Error('Cannot read snapshot process name')
+    // denied. Let the bridge fall back for this window without disabling Koffi.
+    if (pid && !processName) {
+      const err = new Error('Cannot read snapshot process name')
+      err.transient = true
+      throw err
+    }
     const left = rect.readInt32LE(0), top = rect.readInt32LE(4)
     const right = rect.readInt32LE(8), bottom = rect.readInt32LE(12)
     return { hwnd, title: text.toString('utf16le', 0, Math.max(0, length) * 2),
