@@ -50,6 +50,7 @@ function loadPanelMenuHarness() {
     },
     window: {
       SendRule: { resolveSendRule: () => ({ matched: false, mode: 'send', key: 'enter' }) },
+      PanelSearch: require('../frontend/panel/search.js'),
     },
     $: (sel) => ({ selector: sel }),
     openPop: (anchor, html, onClick) => {

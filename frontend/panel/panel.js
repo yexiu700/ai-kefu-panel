@@ -37,92 +37,19 @@
   }
 
   // ———————————————————— 工具 ————————————————————
-  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
-  const safeHexColor = (c) => { const s = String(c ?? '').trim(); return /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(s) ? s : '' }
+  const esc = window.PanelSearch.esc
+  const safeHexColor = window.PanelSearch.safeHexColor
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
   const scopeOf = (g) => (g.scope === 'private' ? 'private' : 'company')
-  const tokensOf = (q) => q.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  const tokensOf = window.PanelSearch.tokensOf
 
-  // ———— 拼音索引：全拼 / 首字母，按文本缓存，避免每次按键重算 ————
-  // py/ini 为拼接后的串，pyMap/iniMap 记录串中每个位置对应原文的字符下标，用于把拼音命中映射回中文高亮
+  // ———— 拼音索引：全拼 / 首字母，由共享模块 frontend/panel/search.js 实现 ————
   let PY = window.pinyinPro
-  const pyCache = new Map()
-  function pyInfo(text) {
-    let info = pyCache.get(text)
-    if (info) return info
-    const low = text.toLowerCase()
-    info = { low, py: '', pyMap: [], pyStart: [], ini: '', iniMap: [], hasZh: false }
-    if (PY && /[㐀-鿿]/.test(text)) {
-      info.hasZh = true
-      let pos = 0
-      let py = ''; let ini = ''
-      for (const it of PY.pinyin(text, { type: 'all', toneType: 'none', v: true })) {
-        const o = String(it.origin ?? ''); const len = o.length || 1
-        const s = it.isZh ? String(it.pinyin || '').toLowerCase() : o.toLowerCase()
-        const f = it.isZh ? (s[0] || '') : o.toLowerCase()
-        for (let k = 0; k < s.length; k++) { info.pyMap.push([pos, pos + len]); info.pyStart.push(k === 0) }
-        for (let k = 0; k < f.length; k++) info.iniMap.push([pos, pos + len])
-        py += s; ini += f; pos += len
-      }
-      info.py = py; info.ini = ini
-    }
-    if (pyCache.size > 8000) pyCache.clear()
-    pyCache.set(text, info)
-    return info
-  }
-
-  // 返回 token 在原文中的命中区间（原文下标），kind: 0 原文 / 1 全拼 / 2 首字母；未命中返回 null
-  function findToken(text, t) {
-    const info = pyInfo(text)
-    const ranges = []
-    let i = info.low.indexOf(t)
-    while (i !== -1) { ranges.push([i, i + t.length]); i = info.low.indexOf(t, i + t.length) }
-    if (ranges.length) return { kind: 0, ranges }
-    if (!info.hasZh || !/^[a-z0-9]+$/.test(t)) return null
-    // 全拼：须从某个字的拼音开头起匹配（末尾允许只打了一半，如 niha）
-    i = info.py.indexOf(t)
-    while (i !== -1) {
-      if (info.pyStart[i]) ranges.push([info.pyMap[i][0], info.pyMap[i + t.length - 1][1]])
-      i = info.py.indexOf(t, i + 1)
-    }
-    if (ranges.length) return { kind: 1, ranges }
-    i = info.ini.indexOf(t)
-    while (i !== -1) {
-      ranges.push([info.iniMap[i][0], info.iniMap[i + t.length - 1][1]])
-      i = info.ini.indexOf(t, i + t.length)
-    }
-    return ranges.length ? { kind: 2, ranges } : null
-  }
-
-  function highlight(text, tokens) {
-    const raw = String(text ?? '')
-    if (!tokens.length) return esc(raw)
-    const ranges = []
-    for (const t of tokens) { const m = findToken(raw, t); if (m) ranges.push(...m.ranges) }
-    if (!ranges.length) return esc(raw)
-    ranges.sort((a, b) => a[0] - b[0])
-    const merged = [ranges[0].slice()]
-    for (const r of ranges.slice(1)) {
-      const last = merged[merged.length - 1]
-      if (r[0] <= last[1]) last[1] = Math.max(last[1], r[1]); else merged.push(r.slice())
-    }
-    let out = ''; let pos = 0
-    for (const [a, b] of merged) { out += esc(raw.slice(pos, a)) + '<mark>' + esc(raw.slice(a, b)) + '</mark>'; pos = b }
-    return out + esc(raw.slice(pos))
-  }
-
-  // 命中位置靠后时截取片段，保证两行内能看到高亮
-  function snippet(text, tokens) {
-    const s = String(text ?? '')
-    if (!tokens.length) return s
-    let first = -1
-    for (const t of tokens) {
-      const m = findToken(s, t)
-      const i = m ? m.ranges[0][0] : -1
-      if (i !== -1 && (first === -1 || i < first)) first = i
-    }
-    return first > 36 ? '…' + s.slice(first - 14) : s
-  }
+  const searchEngine = window.PanelSearch.createSearchEngine({ getPinyin: () => PY })
+  const pyInfo = (text) => searchEngine.pyInfo(text)
+  const findToken = (text, t) => searchEngine.findToken(text, t)
+  const highlight = (text, tokens) => searchEngine.highlight(text, tokens)
+  const snippet = (text, tokens) => searchEngine.snippet(text, tokens)
 
   let toastTimer = 0
   function toast(msg, kind = '') {
@@ -174,18 +101,7 @@
 
   // ———————————————————— 话术列表 ————————————————————
   function scoreFor(p, tokens) {
-    if (!tokens.length) return 1
-    const title = String(p.title || '')
-    let score = 0
-    for (const t of tokens) {
-      const mt = title ? findToken(title, t) : null
-      if (mt) {
-        const atStart = mt.ranges[0][0] === 0
-        score += mt.kind === 0 ? (atStart ? 6 : 4) : (atStart ? 5 : 3)
-      } else return 0
-    }
-    const u = S.usage[p.id]
-    return score + (u ? Math.min(u.n, 20) * 0.05 : 0)
+    return searchEngine.scoreFor(p, tokens, S.usage)
   }
 
   function groupsInScope(scope) {
@@ -941,7 +857,7 @@
           }
           PY = window.pinyinPro
           // 首屏搜索可能缓存了纯文本结果，启用拼音时必须重新建立索引。
-          pyCache.clear()
+          searchEngine.clearCache()
           warmPinyin()
           if (S.q.trim()) renderList()
         }
@@ -1015,29 +931,10 @@
 })()
 
 function sendFailureMessage(r) {
-  if (isUnconfirmedPaste(r)) return ''
-  const err = String(r?.error || '').trim()
-  if (/elevation-mismatch/i.test(`${err} ${r?.message || ''}`)) {
-    return '京东工作台以管理员运行，请右键以管理员身份运行 AI客服（elevation-mismatch）'
-  }
-  if (/activation failed/i.test(err) || /activation failed/i.test(r?.message || '')) {
-    return '没能切到聊天窗（Target activation failed），内容已复制；可点目标按钮重新「选择聊天窗…」'
-  }
-  if (err && r?.message) return `${r.message}（${err}）`
-  if (err) return `没能发到聊天窗（${err}），内容已复制，请手动粘贴`
-  return r?.message || '没能发到聊天窗，内容已复制，请手动粘贴'
+  return window.SendErrors.sendFailureMessage(r)
 }
 
 function isUnconfirmedPaste(r) {
-  if (!r || r.mediaErrors?.length) return false
-  const err = String(r.error || '')
-  const msg = String(r.message || '')
-  if (/elevation-mismatch|activation failed/i.test(`${err} ${msg}`)) return false
-  return Boolean(
-    r.sendKeysOk &&
-      (r.verify === 'mismatch' ||
-        /paste verification mismatch|paste.*unconfirmed/i.test(err) ||
-        /粘贴未确认/.test(msg)),
-  )
+  return window.SendErrors.isUnconfirmedPaste(r)
 }
 

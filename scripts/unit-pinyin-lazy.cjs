@@ -7,7 +7,8 @@ const panel = fs.readFileSync('frontend/panel/panel.js', 'utf8')
 const html = fs.readFileSync('frontend/index.html', 'utf8')
 assert.ok(!/<script[^>]+src=["'][^"']*pinyin-pro/.test(html), 'vendor must not block panel startup')
 assert.ok(panel.includes('boot().then(schedulePinyinLoad)'), 'schedule only after boot has rendered the list')
-const code = panel.slice(panel.indexOf('  let PY ='), panel.indexOf('  function highlight(')) +
+const PanelSearch = require('../frontend/panel/search.js')
+const code = panel.slice(panel.indexOf('  let PY ='), panel.indexOf('  const highlight =')) +
   panel.slice(panel.indexOf('  function warmPinyin()'), panel.indexOf('  async function boot()')) +
   ';globalThis.api={findToken,warmPinyin,schedulePinyinLoad}'
 
@@ -16,7 +17,7 @@ function harness(withIdle = true) {
   let renders = 0
   const ctx = {
     S: { q: 'nh', library: { groups: [{ phrases: [{ title: '你好', content: 'HELLO' }] }] } },
-    window: withIdle ? { requestIdleCallback: cb => idle.push(cb) } : {},
+    window: withIdle ? { PanelSearch, requestIdleCallback: cb => idle.push(cb) } : { PanelSearch },
     requestAnimationFrame: cb => frames.push(cb),
     setTimeout: cb => timers.push(cb),
     document: { createElement: () => ({}), head: { appendChild: script => scripts.push(script) } },

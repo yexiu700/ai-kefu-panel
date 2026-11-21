@@ -15,6 +15,7 @@ async function main() {
   const notices = [], copies = [], used = [], closed = []
   let target = true, result = { ok: true }, failure = null, loads = 0
   const ui = {
+    window: { SendErrors: require('../frontend/panel/send-errors.js') },
     S: { busyId: null, aiDraft: 'reply', settings: {} },
     hasTarget: () => target,
     copyText: async text => copies.push(text),
