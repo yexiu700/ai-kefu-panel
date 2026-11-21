@@ -62,6 +62,7 @@ function emitAll(event, payload) {
     try { win.webContents.send('tauri-event', { event, payload }) } catch { /* ignore */ }
   }
 }
+assist.setEmitter?.(emitAll)
 
 function getPanelState() {
   const settings = store.loadSettings()
@@ -116,22 +117,16 @@ async function handleCommand(cmd, args = {}, ctx) {
         const region = feishu.resolveRegion(args.region, settings)
         store.updateSettings({ feishuLibraryRegion: region })
         const snapshot = store.loadLibrary()
-        const synced = await feishu.syncCompanyFromFeishu({ library: snapshot, region, config: feishu.resolveConfig(settings, process.env, region), globalHotkeys: Object.values(settings.hotkeys || {}) })
+        const globalHotkeys = Object.values(settings.hotkeys || {})
+        const synced = await feishu.syncCompanyFromFeishu({ library: snapshot, region, config: feishu.resolveConfig(settings, process.env, region), globalHotkeys })
         if (synced.result.ok) {
           // 网络请求期间可能有私人话术或收藏编辑，保存前合并最新本地库。
           const latest = store.loadLibrary()
           const company = synced.library.groups.filter(g => g.scope !== 'private')
-          const old = new Map(latest.groups.flatMap(g => (g.phrases || []).map(p => [p.id, p])))
-          for (const g of company) for (const p of g.phrases) {
-            const prev = old.get(p.id)
-            if (prev) for (const k of ['favorite', 'useCount', 'lastUsedAt', 'createdAt']) p[k] = prev[k]
-          }
-          const reserved = new Set([...feishu.localNonCompanyHotkeys(latest), ...Object.values(settings.hotkeys || {})].filter(Boolean).map(h => h.trim().toLowerCase()))
-          for (const g of company) for (const p of g.phrases) if (p.hotkey && reserved.has(p.hotkey.toLowerCase())) {
-            synced.result.hotkeyCleared.push(`${p.title}?${p.hotkey}?`); p.hotkey = null
-          }
+          const merged = feishu.mergeSyncedCompanyGroups(latest, company, globalHotkeys)
+          for (const cleared of merged.hotkeyCleared) synced.result.hotkeyCleared.push(cleared)
           store.backupNow(Infinity)
-          store.saveLibrary(feishu.replaceCompanyGroups(latest, company).library, { skipBackup: true })
+          store.saveLibrary(merged.library, { skipBackup: true })
           emitAll('library-changed', { origin: 'feishu-sync' })
           ctx?.syncHotkeys?.()
         }
@@ -283,8 +278,17 @@ async function handleCommand(cmd, args = {}, ctx) {
       return restored
     }
 
-    case 'get_autostart':
+    case 'get_autostart': {
+      try {
+        if (typeof app.getLoginItemSettings === 'function') {
+          const info = app.getLoginItemSettings({ path: process.execPath })
+          if (typeof info?.openAtLogin === 'boolean') runtime.autostart = info.openAtLogin
+        }
+      } catch (e) {
+        console.warn('[autostart]', e)
+      }
       return runtime.autostart
+    }
     case 'set_autostart': {
       runtime.autostart = !!args.enabled
       // Soft: Electron login item on supported platforms
@@ -551,7 +555,7 @@ async function handleCommand(cmd, args = {}, ctx) {
 
     default:
       console.warn('[ipc:unknown]', cmd, args)
-      runtime.stubs.push(cmd)
+      if (!runtime.stubs.includes(cmd)) runtime.stubs.push(cmd)
       return null
   }
 }

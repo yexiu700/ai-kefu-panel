@@ -44,7 +44,13 @@ async function invoke(cmd, args = {}, options) {
   }
   if (cmd === 'plugin:event|unlisten') {
     const { event, eventId } = args
-    eventListeners.get(event)?.delete(eventId)
+    const map = eventListeners.get(event)
+    if (map) {
+      const handlerId = map.get(eventId)
+      map.delete(eventId)
+      if (handlerId !== undefined) callbacks.delete(handlerId)
+      if (map.size === 0) eventListeners.delete(event)
+    }
     return null
   }
   if (cmd === 'plugin:event|emit') {

@@ -28,13 +28,12 @@ function resolveRegion(region, settings = {}) {
     return ['domestic', 'overseas'].includes(region) ? region : settings.feishuLibraryRegion === 'overseas' ? 'overseas' : 'domestic';
 }
 exports.resolveRegion = resolveRegion;
-function resolveConfig(settings = {}, env = process.env, region, envPath = path.join(os.homedir(), '.config', 'ai-kefu-panel', 'feishu.env')) {
-    const fileEnv = {};
+const feishuConfig = require('./feishu-config');
+function resolveConfig(settings = {}, env = process.env, region, envPath = feishuConfig.defaultPath()) {
+    let fileEnv = {};
     if (fs.existsSync(envPath)) {
-        for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
-            const match = line.match(/^\s*(?:export\s+)?([A-Z_]+)\s*=\s*(.*?)\s*$/);
-            if (match) fileEnv[match[1]] = match[2].replace(/^(['"])(.*)\1$/, '$2');
-        }
+        try { fileEnv = feishuConfig.parse(fs.readFileSync(envPath, 'utf8'), false); }
+        catch { fileEnv = {}; }
     }
     const read = (key, setting, fallback = '') => env['AIKEFU_FEISHU_' + key] ?? fileEnv['AIKEFU_FEISHU_' + key] ?? settings[setting] ?? fallback;
     region = resolveRegion(region, settings);
@@ -169,6 +168,33 @@ function localNonCompanyHotkeys(library) {
     }
     return out;
 }
+/** 合并飞书公司分组到最新本地库：继承本地收藏/统计、清理与最新私人/全局热键冲突的条目、替换非 private 分组。 */
+function mergeSyncedCompanyGroups(latestLibrary, companyGroups, globalHotkeys = []) {
+    const previous = new Map((latestLibrary.groups || []).flatMap((g) => (g.phrases || []).map((p) => [p.id, p])));
+    for (const g of companyGroups) {
+        for (const p of g.phrases || []) {
+            const old = previous.get(p.id);
+            if (old) {
+                for (const key of ['favorite', 'useCount', 'lastUsedAt', 'createdAt']) {
+                    if (old[key] !== undefined) p[key] = old[key];
+                }
+            }
+        }
+    }
+    const reserved = new Set([...localNonCompanyHotkeys(latestLibrary), ...(globalHotkeys || [])].filter(Boolean).map((h) => String(h).trim().toLowerCase()));
+    const hotkeyCleared = [];
+    for (const g of companyGroups) {
+        for (const p of g.phrases || []) {
+            if (p.hotkey && reserved.has(String(p.hotkey).trim().toLowerCase())) {
+                hotkeyCleared.push(`${p.title}（${p.hotkey}）`);
+                p.hotkey = null;
+            }
+        }
+    }
+    const replaced = replaceCompanyGroups(latestLibrary, companyGroups);
+    return { ...replaced, hotkeyCleared };
+}
+exports.mergeSyncedCompanyGroups = mergeSyncedCompanyGroups;
 function describeFeishuError(code, msg, stage) {
     const known = {
         10003: 'App ID 或 App Secret 无效',
@@ -211,8 +237,6 @@ async function requestJson(fetchImpl, url, init, stage) {
         throw new FeishuSyncError(describeFeishuError(body.code, '', stage));
     }
     if (!res.ok) {
-        if (res.status === 403)
-            throw new FeishuSyncError('飞书返回 403：应用无权访问该多维表格，请开通权限并把应用加为 Base 协作者');
         if (res.status === 404)
             throw new FeishuSyncError('飞书返回 404：多维表格或数据表不存在，请检查 Base token / Table ID');
         throw new FeishuSyncError(`飞书请求失败（HTTP ${res.status}）`);
