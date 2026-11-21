@@ -58,12 +58,25 @@ public class HyWin {
 }
 "@
 function Get-WinInfo([IntPtr]$h) { return @{pid=42;title='fixture';exe='fixture.exe';processName='fixture'} }
-foreach ($name in @('Test-TargetForeground', 'Activate-Hwnd', 'Write-Result')) {
+foreach ($name in @('Test-TargetForeground', 'Activate-Hwnd', 'Write-Result', 'Find-RebindCandidate')) {
   $node = $ast.Find({ param($n)
     $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name
   }, $true)
+  Assert ($null -ne $node) "missing function $name in win32-daemon.ps1"
   . ([scriptblock]::Create($node.Extent.Text))
 }
+$apps = @(
+  [pscustomobject]@{ hwnd = 101; title = '京东咚咚工作台'; exe = 'jdm_dd_workbench.exe' },
+  [pscustomobject]@{ hwnd = 202; title = '千牛接待台'; exe = 'AliWorkbench.exe' }
+)
+$sameExe = Find-RebindCandidate $apps 'aliworkbench.exe'
+Assert ($null -ne $sameExe -and $sameExe.hwnd -eq 202) 'Find-RebindCandidate must match same exe case-insensitively'
+$wechatClosed = Find-RebindCandidate $apps 'WeChat.exe'
+Assert ($null -eq $wechatClosed) 'Find-RebindCandidate must NOT cross-rebind closed WeChat to JD workbench'
+$emptyPrev = Find-RebindCandidate $apps ''
+Assert ($null -eq $emptyPrev) 'Find-RebindCandidate must NOT blindly rebind when previousExe is empty'
+$jdFallback = Find-RebindCandidate $apps 'JingMai.exe'
+Assert ($null -ne $jdFallback -and $jdFallback.hwnd -eq 101) 'Find-RebindCandidate may fall back to JD workbench only when previousExe is a JD workbench process'
 $r = Activate-Hwnd ([IntPtr]1)
 Assert ($r.ok -and $r.activateAttempts -eq 0 -and [HyWin]::AltEvents -eq 0) 'foreground fast path must not use ALT'
 [HyWin]::TargetElevation = 1
@@ -86,4 +99,4 @@ try {
 } finally {
   [Console]::SetOut($origOut)
 }
-Write-Output 'PASS: daemon parsing, early match, transient mismatch, fallback budgets, higher delays media floor, activation fast path, retries, elevation, and request-id echo (isolated)'
+Write-Output 'PASS: daemon parsing, early match, transient mismatch, fallback budgets, higher delays media floor, activation fast path, retries, elevation, request-id echo, and safe rebind (isolated)'

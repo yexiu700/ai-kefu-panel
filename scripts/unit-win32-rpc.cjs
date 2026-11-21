@@ -154,9 +154,164 @@ async function main() {
     /\[System\.Threading\.Thread\]::Sleep/,
     'win32-daemon.ps1 must use [System.Threading.Thread]::Sleep for deterministic sub-100ms waits',
   )
+  assert.match(
+    psSource,
+    /function Find-RebindCandidate\b/,
+    'win32-daemon.ps1 must isolate rebind matching into Find-RebindCandidate to prevent cross-app mis-rebind',
+  )
+  assert.match(
+    psSource,
+    /\$running\s*=\s*\$false/,
+    'win32-daemon.ps1 quit command must terminate the outer read loop instead of only breaking switch',
+  )
 
   win32.dispose()
-  console.log('unit-win32-rpc: PASS (request/response id correlation, duplicate/stale isolation, chunked framing)')
+
+  // 4. Transient snapshot error (e.g. elevated foreground window) must NOT permanently disable Koffi backend
+  let snapshotCalls = 0
+  let snapshotMode = 'elevated'
+  let daemonFgCalls = 0
+  const sandbox2 = {
+    module: { exports: {} },
+    __dirname: path.dirname(filename),
+    process: { ...process, platform: 'win32' },
+    console: { ...console, warn() {} },
+    Buffer,
+    Uint8Array,
+    setTimeout,
+    clearTimeout,
+    require: (id) => {
+      if (id === 'node:child_process') {
+        return {
+          spawn() {
+            const c = createFakeChild()
+            c.stdin.write = (chunk) => {
+              for (const line of String(chunk).split('\n').filter(Boolean)) {
+                const req = JSON.parse(line)
+                if (req.op === 'ping') {
+                  c.stdout.emit('data', JSON.stringify({ id: req.id, ok: true, op: 'ping' }) + '\n')
+                } else if (req.op === 'fg') {
+                  daemonFgCalls++
+                  c.stdout.emit('data', JSON.stringify({ id: req.id, ok: true, window: { hwnd: 501, title: '管理员窗口', exe: 'Taskmgr.exe' } }) + '\n')
+                }
+              }
+              return true
+            }
+            return c
+          },
+        }
+      }
+      if (id === './win32-snapshot') {
+        return {
+          createSnapshotBackend: () => ({
+            getForeground() {
+              snapshotCalls++
+              if (snapshotMode === 'elevated') {
+                const err = new Error('Cannot read snapshot process name')
+                err.transient = true
+                throw err
+              }
+              return { hwnd: 602, title: '微信', exe: 'WeChat.exe' }
+            },
+            getWindowRect: () => null,
+          }),
+        }
+      }
+      return realRequire(id)
+    },
+  }
+  vm.runInNewContext(fs.readFileSync(filename, 'utf8'), sandbox2, { filename })
+  const win32Snap = sandbox2.module.exports
+  const elevatedFg = await win32Snap.getForeground()
+  assert.equal(elevatedFg?.hwnd, 501, 'transient snapshot error should fall back to daemon for this tick')
+  assert.equal(daemonFgCalls, 1)
+  snapshotMode = 'normal'
+  const normalFg = await win32Snap.getForeground()
+  assert.equal(normalFg?.hwnd, 602, 'Koffi snapshot backend must remain enabled after a transient elevated-window failure')
+  assert.equal(snapshotCalls, 2)
+  assert.equal(daemonFgCalls, 1, 'normal window must use Koffi without hitting daemon again')
+  win32Snap.dispose()
+
+  // 5. Concurrent requests during warmup must wait for ping; stale child exit must not corrupt new child
+  const spawnedChildren = []
+  let activeWriteHandler = null
+  const sandbox3 = {
+    module: { exports: {} },
+    __dirname: path.dirname(filename),
+    process: { ...process, platform: 'win32' },
+    console: { ...console, warn() {} },
+    Buffer,
+    Uint8Array,
+    setTimeout,
+    clearTimeout,
+    require: (id) => {
+      if (id === 'node:child_process') {
+        return {
+          spawn() {
+            const c = createFakeChild()
+            c.stdin.write = (chunk) => {
+              for (const line of String(chunk).split('\n').filter(Boolean)) {
+                const req = JSON.parse(line)
+                activeWriteHandler?.(req, c)
+              }
+              return true
+            }
+            spawnedChildren.push(c)
+            return c
+          },
+        }
+      }
+      if (id === './win32-snapshot') return { createSnapshotBackend: () => null }
+      return realRequire(id)
+    },
+  }
+  vm.runInNewContext(fs.readFileSync(filename, 'utf8'), sandbox3, { filename })
+  const win32Life = sandbox3.module.exports
+
+  const order = []
+  let releasePing = null
+  activeWriteHandler = (req, c) => {
+    order.push(req.op)
+    if (req.op === 'ping') {
+      releasePing = () => c.stdout.emit('data', JSON.stringify({ id: req.id, ok: true, op: 'ping' }) + '\n')
+    } else if (req.op === 'fg') {
+      c.stdout.emit('data', JSON.stringify({ id: req.id, ok: true, window: { hwnd: 111, title: '窗1', exe: 'a.exe' } }) + '\n')
+    }
+  }
+  const pWarm = win32Life.ensureDaemon()
+  const pEarlyFg = win32Life.getForeground()
+  await new Promise((r) => setTimeout(r, 80))
+  assert.deepEqual(order, ['ping'], 'concurrent request during warmup must wait until warm ping completes')
+  assert.ok(releasePing, 'warm ping must have been issued')
+  releasePing()
+  await pWarm
+  const firstFg = await pEarlyFg
+  assert.equal(firstFg?.hwnd, 111)
+  assert.deepEqual(order, ['ping', 'fg'])
+  assert.equal(spawnedChildren.length, 1)
+
+  // Simulate old child disposed and replaced by a new child; delayed exit of old child must NOT break new child
+  const oldChild = spawnedChildren[0]
+  win32Life.dispose()
+  activeWriteHandler = (req, c) => {
+    if (req.op === 'ping') {
+      c.stdout.emit('data', JSON.stringify({ id: req.id, ok: true, op: 'ping' }) + '\n')
+    } else if (req.op === 'rect') {
+      setTimeout(() => {
+        c.stdout.emit('data', JSON.stringify({ id: req.id, ok: true, window: { hwnd: 222, title: '新进程窗', exe: 'b.exe' } }) + '\n')
+      }, 20)
+    }
+  }
+  await win32Life.ensureDaemon()
+  assert.equal(spawnedChildren.length, 2)
+  const pendingRect = win32Life.getWindowRect(222)
+  // Stale exit event fires from oldChild while newChild has an in-flight request
+  oldChild.emit('exit', 1)
+  const rectAfterStaleExit = await pendingRect
+  assert.equal(rectAfterStaleExit?.hwnd, 222, 'stale exit from previous daemon must not reject active request of new daemon')
+  win32Life.dispose()
+
+  console.log('unit-win32-rpc: PASS (id correlation, transient Koffi fallback, warmup queue, stale exit isolation)')
 }
 
 main().catch((err) => {

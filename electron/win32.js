@@ -22,8 +22,42 @@ let starting = null
 let reqId = 0
 const pending = new Map()
 const bus = new EventEmitter()
-let buffer = ''
 let snapshotBackend
+
+function rejectPendingForChild(targetChild, err) {
+  for (const [id, entry] of pending) {
+    if (!targetChild || entry.proc === targetChild) {
+      pending.delete(id)
+      entry.reject(err)
+    }
+  }
+}
+
+function sendRawRequest(targetChild, payload, timeoutMs = 8000) {
+  return new Promise((resolve, reject) => {
+    if (!targetChild || targetChild.killed || !targetChild.stdin?.writable) {
+      reject(new Error('win32 daemon not ready'))
+      return
+    }
+    const id = ++reqId
+    const timer = setTimeout(() => {
+      pending.delete(id)
+      reject(new Error('win32 timeout: ' + payload.op))
+    }, timeoutMs)
+    pending.set(id, {
+      proc: targetChild,
+      resolve: (msg) => { clearTimeout(timer); resolve(msg) },
+      reject: (err) => { clearTimeout(timer); reject(err) },
+    })
+    try {
+      targetChild.stdin.write(JSON.stringify({ ...payload, id }) + '\n')
+    } catch (e) {
+      pending.delete(id)
+      clearTimeout(timer)
+      reject(e)
+    }
+  })
+}
 
 function nativeSnapshot(method, hwnd) {
   // undefined means unavailable: preserve the existing daemon fallback.
@@ -37,6 +71,9 @@ function nativeSnapshot(method, hwnd) {
   if (!snapshotBackend) return undefined
   try { return snapshotBackend[method](hwnd) }
   catch (e) {
+    if (e?.transient || /Cannot read snapshot process name/i.test(String(e?.message || ''))) {
+      return undefined
+    }
     snapshotBackend = null
     console.warn('[win32] native snapshot failed; using daemon:', e.message)
     return undefined
@@ -49,32 +86,42 @@ function isWin() {
 
 function ensureDaemon() {
   if (!isWin()) return Promise.resolve(null)
-  if (child && !child.killed) return Promise.resolve(child)
   if (starting) return starting
+  if (child && !child.killed) return Promise.resolve(child)
   starting = new Promise((resolve, reject) => {
+    let settled = false
+    const finishResolve = (c) => {
+      if (settled) return
+      settled = true
+      resolve(c)
+    }
+    const finishReject = (err) => {
+      if (settled) return
+      settled = true
+      reject(err)
+    }
     try {
       const c = spawn(
         'powershell.exe',
         ['-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT],
         { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] },
       )
-      child = c
-      buffer = ''
+      let stdoutBuffer = ''
       c.stdout.setEncoding('utf8')
       c.stderr.setEncoding('utf8')
       c.stdout.on('data', (chunk) => {
-        buffer += chunk
+        stdoutBuffer += chunk
         let idx
-        while ((idx = buffer.indexOf('\n')) >= 0) {
-          const line = buffer.slice(0, idx).trim()
-          buffer = buffer.slice(idx + 1)
+        while ((idx = stdoutBuffer.indexOf('\n')) >= 0) {
+          const line = stdoutBuffer.slice(0, idx).trim()
+          stdoutBuffer = stdoutBuffer.slice(idx + 1)
           if (!line) continue
           let msg
           try { msg = JSON.parse(line) } catch { continue }
           if (msg && typeof msg === 'object' && msg.id != null) {
             const matchId = Number(msg.id)
             const entry = pending.get(matchId)
-            if (entry) {
+            if (entry && entry.proc === c) {
               pending.delete(matchId)
               const { id: _id, ...clean } = msg
               entry.resolve(clean)
@@ -83,11 +130,13 @@ function ensureDaemon() {
             }
           } else {
             // Fallback for unattributed lines (e.g. malformed request JSON before id is parsed)
-            const first = pending.keys().next()
-            if (!first.done) {
-              const id = first.value
-              const entry = pending.get(id)
-              pending.delete(id)
+            let matchedId = null
+            for (const [id, entry] of pending) {
+              if (entry.proc === c) { matchedId = id; break }
+            }
+            if (matchedId !== null) {
+              const entry = pending.get(matchedId)
+              pending.delete(matchedId)
               entry.resolve(msg)
             } else {
               bus.emit('orphan', msg)
@@ -101,26 +150,36 @@ function ensureDaemon() {
       })
       c.on('exit', (code) => {
         console.warn('[win32] daemon exited', code)
-        child = null
-        for (const [, entry] of pending) entry.reject(new Error('win32 daemon exited'))
-        pending.clear()
+        if (child === c) child = null
+        const err = new Error('win32 daemon exited')
+        rejectPendingForChild(c, err)
+        finishReject(err)
       })
       c.on('error', (err) => {
         console.warn('[win32] spawn error', err)
-        child = null
-        reject(err)
+        if (child === c) child = null
+        rejectPendingForChild(c, err)
+        finishReject(err)
       })
-      // warm ping
+      // warm ping directly on this child before exposing it as ready
       setTimeout(() => {
-        request({ op: 'ping' }, 5000).then(() => resolve(c)).catch((e) => {
+        if (settled || c.killed) return
+        sendRawRequest(c, { op: 'ping' }, 5000).then(() => {
+          if (c.killed) {
+            finishReject(new Error('win32 daemon killed during warmup'))
+            return
+          }
+          child = c
+          finishResolve(c)
+        }).catch((e) => {
           try { c.kill() } catch { /* ignore */ }
-          child = null
-          reject(e)
+          if (child === c) child = null
+          finishReject(e)
         })
       }, 50)
     } catch (e) {
       starting = null
-      reject(e)
+      finishReject(e)
     }
   }).finally(() => { starting = null })
   return starting
@@ -128,28 +187,7 @@ function ensureDaemon() {
 
 function request(payload, timeoutMs = 8000) {
   if (!isWin()) return Promise.resolve({ ok: false, error: 'not-windows' })
-  return ensureDaemon().then(() => new Promise((resolve, reject) => {
-    if (!child || !child.stdin.writable) {
-      reject(new Error('win32 daemon not ready'))
-      return
-    }
-    const id = ++reqId
-    const timer = setTimeout(() => {
-      pending.delete(id)
-      reject(new Error('win32 timeout: ' + payload.op))
-    }, timeoutMs)
-    pending.set(id, {
-      resolve: (msg) => { clearTimeout(timer); resolve(msg) },
-      reject: (err) => { clearTimeout(timer); reject(err) },
-    })
-    try {
-      child.stdin.write(JSON.stringify({ ...payload, id }) + '\n')
-    } catch (e) {
-      pending.delete(id)
-      clearTimeout(timer)
-      reject(e)
-    }
-  }))
+  return ensureDaemon().then((c) => sendRawRequest(c, payload, timeoutMs))
 }
 
 async function listOpenApps() {
@@ -241,9 +279,11 @@ async function getAppIcon(hwnd) {
 
 function dispose() {
   if (child) {
-    try { child.stdin.write(JSON.stringify({ op: 'quit' }) + '\n') } catch { /* ignore */ }
-    try { child.kill() } catch { /* ignore */ }
+    const dying = child
     child = null
+    try { dying.stdin.write(JSON.stringify({ op: 'quit' }) + '\n') } catch { /* ignore */ }
+    try { dying.kill() } catch { /* ignore */ }
+    rejectPendingForChild(dying, new Error('win32 daemon disposed'))
   }
 }
 

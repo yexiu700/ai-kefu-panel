@@ -208,12 +208,21 @@ function Wait-PasteResult([IntPtr]$h, [string]$prefix, [bool]$media, [int]$delay
   return @{ verify = $verify; verifyWaitMs = $waitTimer.ElapsedMilliseconds }
 }
 
+function Find-RebindCandidate([object[]]$apps, [string]$previousExe) {
+  if ([string]::IsNullOrWhiteSpace($previousExe) -or -not $apps) { return $null }
+  $candidate = $apps | Where-Object { $_.exe -ieq $previousExe } | Select-Object -First 1
+  if ($candidate) { return $candidate }
+  if ($previousExe -match '^(?i)(jdm_dd_workbench|pop_dd_workbench|jm_dd_workbench|jmworkstation|jingmai)\.exe$') {
+    return $apps | Where-Object { $_.title -like '*咚咚工作台*' -or $_.exe -match '^(?i)(jdm_dd_workbench|pop_dd_workbench|jm_dd_workbench)\.exe$' } | Select-Object -First 1
+  }
+  return $null
+}
+
 function Send-KeysTo([IntPtr]$h, $mode, $key, $delayMs, [string]$prefix, [string]$previousExe, [bool]$media = $false, [bool]$focusInput = $false, [uint32]$clipboardSequence = 0) {
   $rebound = $false
   if (-not [HyWin]::IsWindow($h)) {
     $apps = @(List-OpenApps)
-    $candidate = $apps | Where-Object { $previousExe -and $_.exe -ieq $previousExe } | Select-Object -First 1
-    if (-not $candidate) { $candidate = $apps | Where-Object { $_.title -like '*咚咚工作台*' -or $_.exe -match '^(jdm_dd_workbench|pop_dd_workbench|jm_dd_workbench)\.exe$' } | Select-Object -First 1 }
+    $candidate = Find-RebindCandidate $apps $previousExe
     if ($candidate) { $h = [IntPtr]([int64]$candidate.hwnd); $rebound = $true }
   }
   $r = Activate-Hwnd $h
@@ -278,6 +287,7 @@ function Get-ExePathFromHwnd([IntPtr]$h) {
 function Get-AppIconPngBase64([IntPtr]$h) {
   $exe = Get-ExePathFromHwnd $h
   if (-not $exe -or -not (Test-Path -LiteralPath $exe)) { return $null }
+  $icon = $null; $bmp = $null; $ms = $null
   try {
     Add-Type -AssemblyName System.Drawing -ErrorAction SilentlyContinue
     $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($exe)
@@ -285,11 +295,13 @@ function Get-AppIconPngBase64([IntPtr]$h) {
     $bmp = $icon.ToBitmap()
     $ms = New-Object System.IO.MemoryStream
     $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
-    $bytes = $ms.ToArray()
-    $ms.Dispose(); $bmp.Dispose(); $icon.Dispose()
-    return [Convert]::ToBase64String($bytes)
+    return [Convert]::ToBase64String($ms.ToArray())
   } catch {
     return $null
+  } finally {
+    if ($null -ne $ms) { $ms.Dispose() }
+    if ($null -ne $bmp) { $bmp.Dispose() }
+    if ($null -ne $icon) { $icon.Dispose() }
   }
 }
 
@@ -307,7 +319,8 @@ function Write-Result($obj) {
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-while ($true) {
+$running = $true
+while ($running) {
   $line = [Console]::In.ReadLine()
   if ($null -eq $line) { break }
   $line = $line.Trim()
@@ -320,21 +333,25 @@ while ($true) {
     switch ($op) {
       'ping' { Write-Result @{ ok = $true; op = 'ping' } }
       'clipboard-files' {
+        $clipReason = $null
         try {
           $files = New-Object System.Collections.Specialized.StringCollection
           foreach ($file in $req.paths) {
-            if (-not [System.IO.File]::Exists([string]$file)) { throw '文件不存在或无权访问，请重新添加媒体' }
+            if (-not [System.IO.File]::Exists([string]$file)) { $clipReason = '文件不存在或无权访问，请重新添加媒体'; throw $clipReason }
             [void]$files.Add([string]$file)
           }
-          if ($files.Count -eq 0) { throw '没有可复制的媒体文件' }
+          if ($files.Count -eq 0) { $clipReason = '没有可复制的媒体文件'; throw $clipReason }
           $data = New-Object System.Windows.Forms.DataObject
           $data.SetFileDropList($files)
           # Persistent CF_HDROP data survives the helper and needs no temporary copies.
           [System.Windows.Forms.Clipboard]::SetDataObject($data, $true, 5, 100)
           $actual = [System.Windows.Forms.Clipboard]::GetFileDropList()
-          if ($actual.Count -ne $files.Count) { throw '文件剪贴板写入校验失败，请重试' }
+          if ($actual.Count -ne $files.Count) { $clipReason = '文件剪贴板写入校验失败，请重试'; throw $clipReason }
           Write-Result @{ ok = $true; count = $actual.Count; format = 'CF_HDROP'; clipboardSequence = [HyWin]::GetClipboardSequenceNumber() }
-        } catch { Write-Result @{ ok = $false; message = '无法复制媒体文件，请检查文件是否存在、访问权限和剪贴板占用'; error = 'file-clipboard-failed' } }
+        } catch {
+          $msg = if ($clipReason) { $clipReason } else { '无法复制媒体文件，请检查文件是否存在、访问权限和剪贴板占用' }
+          Write-Result @{ ok = $false; message = $msg; error = 'file-clipboard-failed' }
+        }
       }
       'list' {
         $apps = @(List-OpenApps)
@@ -365,7 +382,7 @@ while ($true) {
         if ($null -eq $b64) { Write-Result @{ ok = $true; pngBase64 = $null } }
         else { Write-Result @{ ok = $true; pngBase64 = $b64 } }
       }
-      'quit' { Write-Result @{ ok = $true }; break }
+      'quit' { Write-Result @{ ok = $true }; $running = $false }
       default { Write-Result @{ ok = $false; error = "unknown op: $op" } }
     }
   } catch {
