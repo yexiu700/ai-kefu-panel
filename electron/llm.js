@@ -34,27 +34,19 @@ function extractChatText(data) {
   return ''
 }
 
-async function callResponsesOnce(cfg, messages, opts) {
+async function postJson(url, payload, cfg, opts, label) {
   const timeoutMs = opts.timeoutMs ?? 60000
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
-  const instructions = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n')
-  const input = messages.filter((m) => m.role !== 'system')
+  const fetchImpl = opts.fetchImpl || fetch
   try {
-    const res = await fetch(responsesUrl(cfg.baseUrl), {
+    const res = await fetchImpl(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(cfg.apiKey ? { Authorization: `Bearer ${cfg.apiKey}` } : {}),
       },
-      body: JSON.stringify({
-        model: cfg.model,
-        ...(instructions ? { instructions } : {}),
-        input,
-        temperature: cfg.temperature ?? 0.4,
-        max_output_tokens: opts.maxTokens ?? 1200,
-        stream: false,
-      }),
+      body: JSON.stringify(payload),
       signal: ctrl.signal,
     })
     const bodyText = await res.text()
@@ -62,18 +54,21 @@ async function callResponsesOnce(cfg, messages, opts) {
       let msg = bodyText.slice(0, 300)
       try { msg = JSON.parse(bodyText)?.error?.message ?? msg } catch { /* keep */ }
       const Err = (res.status === 429 || res.status >= 500) ? RetryableError : Error
-      throw new Err(`LLM 接口返回 ${res.status}：${msg}`)
+      const err = new Err(`${label} 返回 ${res.status}：${msg}`)
+      err.status = res.status
+      throw err
     }
-    let data
-    try { data = JSON.parse(bodyText) } catch {
-      throw new RetryableError(`LLM 返回了无法解析的内容：${bodyText.slice(0, 120)}`)
+    try {
+      return JSON.parse(bodyText)
+    } catch {
+      throw new RetryableError(`${label} 返回了无法解析的内容：${bodyText.slice(0, 120)}`)
     }
-    if (data?.error) throw new RetryableError(`LLM 接口错误：${data.error.message ?? JSON.stringify(data.error)}`)
-    const content = extractOutputText(data)
-    if (!content.trim()) throw new RetryableError('LLM 返回内容为空')
-    return content
   } catch (e) {
-    if (e?.name === 'AbortError') throw new Error(`LLM 请求超时（${Math.round(timeoutMs / 1000)} 秒）`)
+    if (e?.name === 'AbortError') {
+      const err = new Error(`LLM 请求超时（${Math.round(timeoutMs / 1000)} 秒）`)
+      err.isTimeout = true
+      throw err
+    }
     if (e instanceof TypeError) throw new RetryableError(`网络错误：${e.message}`)
     throw e
   } finally {
@@ -81,47 +76,53 @@ async function callResponsesOnce(cfg, messages, opts) {
   }
 }
 
+async function callResponsesOnce(cfg, messages, opts) {
+  const instructions = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n')
+  const input = messages.filter((m) => m.role !== 'system')
+  const data = await postJson(
+    responsesUrl(cfg.baseUrl),
+    {
+      model: cfg.model,
+      ...(instructions ? { instructions } : {}),
+      input,
+      temperature: cfg.temperature ?? 0.4,
+      max_output_tokens: opts.maxTokens ?? 1200,
+      stream: false,
+    },
+    cfg,
+    opts,
+    'LLM 接口',
+  )
+  if (data?.error) throw new RetryableError(`LLM 接口错误：${data.error.message ?? JSON.stringify(data.error)}`)
+  const content = extractOutputText(data)
+  if (!content.trim()) throw new RetryableError('LLM 返回内容为空')
+  return content
+}
+
 async function callChatCompletionsOnce(cfg, messages, opts) {
-  const timeoutMs = opts.timeoutMs ?? 60000
-  const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
-  try {
-    const res = await fetch(chatCompletionsUrl(cfg.baseUrl), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(cfg.apiKey ? { Authorization: `Bearer ${cfg.apiKey}` } : {}),
-      },
-      body: JSON.stringify({
-        model: cfg.model,
-        messages,
-        temperature: cfg.temperature ?? 0.4,
-        max_tokens: opts.maxTokens ?? 1200,
-        stream: false,
-      }),
-      signal: ctrl.signal,
-    })
-    const bodyText = await res.text()
-    if (!res.ok) {
-      let msg = bodyText.slice(0, 300)
-      try { msg = JSON.parse(bodyText)?.error?.message ?? msg } catch { /* keep */ }
-      const Err = (res.status === 429 || res.status >= 500) ? RetryableError : Error
-      throw new Err(`Chat Completions 返回 ${res.status}：${msg}`)
-    }
-    let data
-    try { data = JSON.parse(bodyText) } catch {
-      throw new RetryableError(`Chat Completions 无法解析：${bodyText.slice(0, 120)}`)
-    }
-    const content = extractChatText(data)
-    if (!content.trim()) throw new RetryableError('Chat Completions 返回为空')
-    return content
-  } catch (e) {
-    if (e?.name === 'AbortError') throw new Error(`LLM 请求超时（${Math.round(timeoutMs / 1000)} 秒）`)
-    if (e instanceof TypeError) throw new RetryableError(`网络错误：${e.message}`)
-    throw e
-  } finally {
-    clearTimeout(timer)
-  }
+  const data = await postJson(
+    chatCompletionsUrl(cfg.baseUrl),
+    {
+      model: cfg.model,
+      messages,
+      temperature: cfg.temperature ?? 0.4,
+      max_tokens: opts.maxTokens ?? 1200,
+      stream: false,
+    },
+    cfg,
+    opts,
+    'Chat Completions',
+  )
+  const content = extractChatText(data)
+  if (!content.trim()) throw new RetryableError('Chat Completions 返回为空')
+  return content
+}
+
+function shouldFallbackToChatCompletions(err) {
+  if (!err) return false
+  // Never waste another full timeout or retry invalid credentials on a second endpoint.
+  if (err.isTimeout || err.status === 401 || err.status === 403) return false
+  return true
 }
 
 async function callLlm(cfg, messages, opts = {}) {
@@ -133,11 +134,14 @@ async function callLlm(cfg, messages, opts = {}) {
     } catch (e) {
       lastErr = e
       if (e instanceof RetryableError && retries-- > 0) {
-        await new Promise((r) => setTimeout(r, 600))
+        await new Promise((r) => setTimeout(r, opts.retryDelayMs ?? 600))
         continue
       }
       break
     }
+  }
+  if (!shouldFallbackToChatCompletions(lastErr)) {
+    throw lastErr
   }
   try {
     return await callChatCompletionsOnce(cfg, messages, opts)

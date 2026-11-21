@@ -349,7 +349,9 @@
     if (!hit) return
     hit.useCount = (hit.useCount || 0) + 1
     hit.lastUsedAt = Date.now()
-    try { await invoke('save_library', { library: S.library, origin: 'panel-usage' }) } catch (e) { console.warn('[usage] save', e) }
+    pendingUsageSaves++
+    try { await invoke('save_library', { library: S.library, origin: 'panel-usage' }) }
+    catch (e) { pendingUsageSaves = Math.max(0, pendingUsageSaves - 1); console.warn('[usage] save', e) }
   }
 
   async function usePhrase(p, act) {
@@ -890,27 +892,33 @@
     syncingFeishu = true
     try {
       const result = await invoke('sync_company_from_feishu', { region })
-      S.settings.feishuLibraryRegion = region
+      if (S.settings) S.settings.feishuLibraryRegion = region
       if (result?.ok) await loadLibrary()
       if (!result?.ok) toast(result?.message || '同步失败', 'err')
     } catch (e) { toast('同步失败：' + (e?.message || e), 'err') }
     finally { syncingFeishu = false }
   }
 
+  let pendingUsageSaves = 0
   async function loadLibrary() {
     try { S.library = (await invoke('get_library')) || { groups: [] } } catch (e) { console.error(e) }
     renderList()
     warmPinyin()
   }
 
-  // 空闲时分批预热拼音缓存，避免首次输入时卡顿
+  // 空闲时分批预热标题拼音缓存（搜索只匹配标题，不预热正文以免撑爆 pyCache）
   function warmPinyin() {
     if (!PY) return
+    const runId = (warmPinyin._runId = (warmPinyin._runId || 0) + 1)
     const texts = []
-    for (const g of S.library.groups || []) for (const p of g.phrases || []) texts.push(String(p.title || ''), String(p.content || ''))
+    for (const g of S.library.groups || []) for (const p of g.phrases || []) {
+      const title = String(p.title || '')
+      if (title) texts.push(title)
+    }
     const idle = window.requestIdleCallback || ((cb) => setTimeout(() => cb({ timeRemaining: () => 8 }), 16))
     let i = 0
     const step = (dl) => {
+      if (warmPinyin._runId !== runId) return
       while (i < texts.length && dl.timeRemaining() > 2) pyInfo(texts[i++])
       if (i < texts.length) idle(step)
     }
@@ -963,7 +971,14 @@
     } catch (e) { console.warn('[boot] auto seed', e) }
     if (assist && assist.phase !== 'idle') onAssist(assist)
 
-    listen('library-changed', loadLibrary)
+    listen('library-changed', (ev) => {
+      if (ev?.origin === 'panel-usage' && pendingUsageSaves > 0) {
+        pendingUsageSaves--
+        renderList()
+        return
+      }
+      loadLibrary()
+    })
     listen('settings-changed', (s) => s && applySettings(s))
     listen('target-changed', (t) => {
       const had = hasTarget(); const prevBound = S.target?.bound

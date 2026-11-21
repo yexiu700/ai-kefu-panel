@@ -93,4 +93,4 @@ function importFile(sourcePath, targetPath = defaultPath(), env = process.env) {
   }
   return { ok: true, ...status(targetPath, env), message: '飞书配置已导入，当前进程可立即同步。App Secret：已配置。' }
 }
-module.exports = { defaultPath, status, importFile, publicError }
+module.exports = { defaultPath, parse, status, importFile, publicError }

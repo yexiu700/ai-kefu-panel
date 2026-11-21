@@ -67,4 +67,33 @@ assert.ok(failed.ctx.api.findToken('HELLO', 'hello'), 'failure preserves plain-t
 assert.equal(failed.renders(), 0, 'failure does not report success or refresh unnecessarily')
 failed.scripts[0].onload()
 assert.equal(failed.warnings.length, 2, 'missing API after load is handled safely')
-console.log('unit-pinyin-lazy: ok (deferred scheduling, fallback, full pinyin, initials, failure)')
+
+// warmPinyin must warm only titles (never body content) and cancel previous idle runs
+const w = harness(true)
+w.ctx.S.library = {
+  groups: [{
+    phrases: [
+      { title: '退货政策', content: '很长的正文内容不应该被预热计算拼音以免撑爆缓存' },
+      { title: '发货时效', content: '另一段很长的正文内容' },
+    ],
+  }],
+}
+const warmedInputs = []
+w.ctx.window.pinyinPro = {
+  pinyin: (text) => {
+    warmedInputs.push(text)
+    return Array.from(text, (origin) => ({ origin, isZh: true, pinyin: 'a' }))
+  },
+}
+w.ctx.api.schedulePinyinLoad()
+w.frames.shift()(); w.frames.shift()(); w.idle.shift()()
+w.scripts[0].onload()
+// Start a second warmPinyin before the first idle step runs: first run must be canceled
+w.ctx.api.warmPinyin()
+while (w.idle.length) {
+  w.idle.shift()({ timeRemaining: () => 50 })
+}
+assert.deepEqual(warmedInputs, ['退货政策', '发货时效'], 'warmPinyin must warm titles only once and cancel stale chains')
+assert.ok(!warmedInputs.some((t) => t.includes('正文')), 'warmPinyin must never waste CPU/cache on phrase body content')
+
+console.log('unit-pinyin-lazy: ok (deferred scheduling, fallback, full pinyin, initials, failure, title-only warm + cancel)')

@@ -72,10 +72,6 @@ function sanitizeReply(text) {
   let s = String(text || '').trim()
   // 去掉模型偶尔加的「回复：」「客服：」前缀
   s = s.replace(/^(?:回复|建议回复|客服回复|可以这样回)[:：]\s*/u, '')
-  // 若整段明显在问操作者，包一层对买家的过渡话
-  if (/^(?:请问您|你能|您能|能否|方便告诉我|需要我|请提供|请补充|我需要知道)/u.test(s) && !/亲|宝|客户|您看|您方便/.test(s.slice(0, 8))) {
-    // keep as-is if already addressing buyer with 您; otherwise still return — prompt should prevent
-  }
   return s.trim()
 }
 
@@ -107,11 +103,18 @@ function parseAssistRaw(raw) {
   return { reply: cleaned.trim(), alternatives: [] }
 }
 
+/** @type {((event: string, payload: any) => void) | null} */
+let emitter = null
+let activeRunId = 0
+
+function setEmitter(fn) {
+  emitter = typeof fn === 'function' ? fn : null
+}
+
 function setState(next) {
   assistState = next
   try {
-    const { emitAll } = require('./handlers')
-    emitAll('assist-state', assistState)
+    if (emitter) emitter('assist-state', assistState)
   } catch (e) {
     console.warn('[assist] emit failed', e)
   }
@@ -123,6 +126,7 @@ function getAssistState() {
 }
 
 async function runLlmReply(question) {
+  const runId = ++activeRunId
   const context = String(question || '').trim().slice(0, 8000)
   if (!context) {
     return setState({
@@ -178,6 +182,8 @@ ${knowledge}
       ],
       { maxTokens: 900, timeoutMs: 60000, retries: 1 },
     )
+    // Ignore stale response if a newer question or assistDiscard superseded this run.
+    if (runId !== activeRunId) return assistState
     const parsed = parseAssistRaw(raw)
     const reply = sanitizeReply(parsed.reply)
     const alternatives = (parsed.alternatives || []).map(sanitizeReply).filter(Boolean)
@@ -214,6 +220,7 @@ ${knowledge}
       },
     })
   } catch (e) {
+    if (runId !== activeRunId) return assistState
     return setState({
       phase: 'error',
       question: context,
@@ -233,6 +240,7 @@ async function assistAsk(question) {
 }
 
 function assistDiscard() {
+  activeRunId++
   return setState(idleState())
 }
 
@@ -261,6 +269,7 @@ function localCloudStatus() {
 }
 
 module.exports = {
+  setEmitter,
   getAssistState,
   assistTrigger,
   assistAsk,
@@ -270,4 +279,7 @@ module.exports = {
   localCloudStatus,
   getApiKey,
   keyCandidates,
+  retrieveEvidence,
+  parseAssistRaw,
+  sanitizeReply,
 }

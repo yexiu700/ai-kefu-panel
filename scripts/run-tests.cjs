@@ -33,6 +33,7 @@ const NODE_UNIT_SUITES = [
   'scripts/unit-hotkeys.cjs',
   'scripts/unit-win32-rpc.cjs',
   'scripts/unit-menu-paths.cjs',
+  'scripts/unit-assist-llm.cjs',
 ]
 
 const WIN_POWERSHELL_SUITES = [

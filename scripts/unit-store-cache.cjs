@@ -46,4 +46,36 @@ const saved = store.defaultSettings()
 store.saveSettings(saved)
 saved.panel.side = 'left'
 assert.equal(store.loadSettings().panel.side, 'right', 'save caller cannot mutate cached object')
-console.log('unit-store-cache: PASS (isolated temp data; no real userData accessed)')
+
+// Corrupt settings.json must be preserved to backups/ before falling back to defaults
+const corruptSettingsRaw = '{not valid json'
+fs.writeFileSync(settingsFile, corruptSettingsRaw, 'utf8')
+const corruptTime = new Date(Date.now() + 4000)
+fs.utimesSync(settingsFile, corruptTime, corruptTime)
+const fallbackSettings = store.loadSettings()
+assert.equal(fallbackSettings.send.mode, 'send')
+const backupsDir = path.join(dir, 'ai-kefu-panel', 'backups')
+const corruptSettingsFiles = fs.readdirSync(backupsDir).filter((f) => f.startsWith('settings-corrupt-') && f.endsWith('.json.bak'))
+assert.equal(corruptSettingsFiles.length, 1, 'corrupt settings.json must be preserved in backups/')
+assert.equal(fs.readFileSync(path.join(backupsDir, corruptSettingsFiles[0]), 'utf8'), corruptSettingsRaw)
+
+// loadLibrary caching: repeated calls do not re-read unchanged library.json, and external edits invalidate cache
+const readsBeforeLib = reads
+store.saveLibrary({ version: 1, groups: [{ id: 'g1', name: '售前', scope: 'company', phrases: [{ id: 'p1', title: '你好', content: '欢迎' }] }], stickers: [] }, { skipBackup: true })
+const lib1 = store.loadLibrary()
+assert.equal(reads, readsBeforeLib, 'freshly saved library is served from cache without disk read')
+lib1.groups[0].name = 'mutated'
+const lib2 = store.loadLibrary()
+assert.equal(reads, readsBeforeLib, 'repeated loadLibrary must hit cache')
+assert.equal(lib2.groups[0].name, '售前', 'cached library returns deep clone')
+
+const libFile = path.join(dir, 'ai-kefu-panel', 'library.json')
+fs.writeFileSync(libFile, JSON.stringify({ version: 1, groups: [{ id: 'g2', name: '外部修改', scope: 'company', phrases: [] }], stickers: [] }))
+const libTime = new Date(Date.now() + 6000)
+fs.utimesSync(libFile, libTime, libTime)
+const lib3 = store.loadLibrary()
+assert.equal(reads, readsBeforeLib + 1, 'external library edit must invalidate cache')
+assert.equal(lib3.groups[0].name, '外部修改')
+
+fs.rmSync(dir, { recursive: true, force: true })
+console.log('unit-store-cache: PASS (settings + library cache, corrupt settings backup, isolated temp data)')

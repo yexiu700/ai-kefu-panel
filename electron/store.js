@@ -149,27 +149,55 @@ function settingsPath() {
   return path.join(getDataDir(), 'settings.json')
 }
 
-function preserveCorruptLibrary(srcPath) {
+function preserveCorruptFile(srcPath, prefix) {
   try {
     const dir = path.join(getDataDir(), 'backups')
     ensureDir(dir)
     const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-    let dest = path.join(dir, `library-corrupt-${stamp}.json.bak`)
+    let dest = path.join(dir, `${prefix}-corrupt-${stamp}.json.bak`)
     let seq = 1
     while (fs.existsSync(dest)) {
-      dest = path.join(dir, `library-corrupt-${stamp}-${seq++}.json.bak`)
+      dest = path.join(dir, `${prefix}-corrupt-${stamp}-${seq++}.json.bak`)
     }
     fs.copyFileSync(srcPath, dest)
     return dest
   } catch (err) {
-    console.error('[store] failed to preserve corrupt library.json', err)
+    console.error(`[store] failed to preserve corrupt ${prefix}.json`, err)
     return null
   }
 }
 
+function writeFileAtomic(filePath, content) {
+  const tmp = filePath + '.tmp'
+  const fd = fs.openSync(tmp, 'w')
+  try {
+    fs.writeFileSync(fd, content, 'utf8')
+    if (typeof fs.fsyncSync === 'function') fs.fsyncSync(fd)
+  } finally {
+    fs.closeSync(fd)
+  }
+  fs.renameSync(tmp, filePath)
+}
+
+function fileStamp(p) {
+  try {
+    const stat = fs.statSync(p)
+    return `${stat.mtimeMs}:${stat.ctimeMs}:${stat.size}`
+  } catch (e) {
+    if (e.code === 'ENOENT') return null
+    throw e
+  }
+}
+
+let libraryCache = null
+
 function loadLibrary() {
-  const p = libraryPath()
-  if (!fs.existsSync(p)) {
+  const p = path.join(app.getPath('userData'), 'ai-kefu-panel', 'library.json')
+  const stamp = fileStamp(p)
+  if (stamp !== null && libraryCache?.path === p && libraryCache.stamp === stamp) {
+    return structuredClone(libraryCache.value)
+  }
+  if (stamp === null) {
     const lib = emptyLibrary()
     saveLibrary(lib, { skipBackup: true })
     return lib
@@ -179,9 +207,12 @@ function loadLibrary() {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
       throw new Error('library root must be a JSON object')
     }
-    return normalizeLibrary(raw)
+    const normalized = normalizeLibrary(raw)
+    libraryCache = { path: p, stamp, value: normalized }
+    return structuredClone(normalized)
   } catch (e) {
-    const savedAt = preserveCorruptLibrary(p)
+    libraryCache = null
+    const savedAt = preserveCorruptFile(p, 'library')
     console.warn('[store] library corrupt, preserved at:', savedAt, e)
     const lib = emptyLibrary()
     if (savedAt) {
@@ -193,11 +224,10 @@ function loadLibrary() {
 
 function saveLibrary(library, opts = {}) {
   const p = libraryPath()
-  library = normalizeLibrary(library)
+  library = normalizeLibrary(structuredClone(library))
   if (!opts.skipBackup && fs.existsSync(p)) backupNow()
-  const tmp = p + '.tmp'
-  fs.writeFileSync(tmp, JSON.stringify(library, null, 2), 'utf8')
-  fs.renameSync(tmp, p)
+  writeFileAtomic(p, JSON.stringify(library, null, 2))
+  libraryCache = { path: p, stamp: fileStamp(p), value: library }
 }
 
 function normalizeSettings(raw) {
@@ -215,7 +245,7 @@ function normalizeSettings(raw) {
   }
   if (!Array.isArray(merged.send.appRules)) merged.send.appRules = []
   if (!merged.hotkeys || typeof merged.hotkeys !== 'object') {
-    merged.hotkeys = defaults.hotkeys
+    merged.hotkeys = { ...defaults.hotkeys }
   }
   // 默认不吸附；仅用户明确改过 docked 才保留
   if (!merged.panel.dockedTouched) {
@@ -226,7 +256,6 @@ function normalizeSettings(raw) {
     const h = Number(merged.panel.floatHeight) || 0
     if (h <= 640) merged.panel.floatHeight = 832
   }
-  if (!merged.hotkeys || typeof merged.hotkeys !== 'object') merged.hotkeys = { ...defaults.hotkeys }
   if (typeof merged.hotkeys.togglePanel !== 'string' || !merged.hotkeys.togglePanel.trim()) {
     merged.hotkeys.togglePanel = defaults.hotkeys.togglePanel
   }
@@ -241,20 +270,10 @@ function normalizeSettings(raw) {
 
 let settingsCache = null
 
-function settingsStamp(p) {
-  try {
-    const stat = fs.statSync(p)
-    return `${stat.mtimeMs}:${stat.ctimeMs}:${stat.size}`
-  } catch (e) {
-    if (e.code === 'ENOENT') return null
-    throw e
-  }
-}
-
 function loadSettings() {
   // Avoid recreating directories and reparsing JSON on every snap tick.
   const p = path.join(app.getPath('userData'), 'ai-kefu-panel', 'settings.json')
-  const stamp = settingsStamp(p)
+  const stamp = fileStamp(p)
   if (settingsCache?.path === p && settingsCache.stamp === stamp) {
     return structuredClone(settingsCache.value)
   }
@@ -275,7 +294,9 @@ function loadSettings() {
       settingsCache = { path: p, stamp, value: next }
     }
     return structuredClone(settingsCache.value)
-  } catch {
+  } catch (e) {
+    const savedAt = preserveCorruptFile(p, 'settings')
+    console.warn('[store] settings corrupt, preserved at:', savedAt, e)
     const value = defaultSettings()
     settingsCache = { path: p, stamp, value }
     return structuredClone(value)
@@ -285,10 +306,8 @@ function loadSettings() {
 function saveSettings(settings) {
   const p = settingsPath()
   const value = normalizeSettings(structuredClone(settings))
-  const tmp = p + '.tmp'
-  fs.writeFileSync(tmp, JSON.stringify(value, null, 2), 'utf8')
-  fs.renameSync(tmp, p)
-  settingsCache = { path: p, stamp: settingsStamp(p), value }
+  writeFileAtomic(p, JSON.stringify(value, null, 2))
+  settingsCache = { path: p, stamp: fileStamp(p), value }
 }
 
 function updateSettings(patch) {
@@ -305,6 +324,7 @@ function updateSettings(patch) {
 }
 
 function pruneBackups(keep = 20) {
+  if (!Number.isFinite(keep)) return
   const dir = path.join(getDataDir(), 'backups')
   const files = fs
     .readdirSync(dir)
@@ -322,8 +342,13 @@ function backupNow(keep = 20) {
   const src = libraryPath()
   const createdAt = new Date().toISOString()
   const stamp = createdAt.replace(/[:.]/g, '-')
-  const fileName = `library-${stamp}.json`
-  const dest = path.join(dir, fileName)
+  let fileName = `library-${stamp}.json`
+  let dest = path.join(dir, fileName)
+  let seq = 1
+  while (fs.existsSync(dest)) {
+    fileName = `library-${stamp}-${seq++}.json`
+    dest = path.join(dir, fileName)
+  }
   if (fs.existsSync(src)) fs.copyFileSync(src, dest)
   else fs.writeFileSync(dest, JSON.stringify(emptyLibrary(), null, 2))
   const stat = fs.statSync(dest)
@@ -356,15 +381,6 @@ function restoreBackup(id) {
 function mediaDir() { return path.join(getDataDir(), 'media') }
 function stickersDir() { return path.join(getDataDir(), 'stickers') }
 
-function copyIntoMedia(src, sub = 'media') {
-  const dir = sub === 'stickers' ? stickersDir() : mediaDir()
-  ensureDir(dir)
-  const base = path.basename(src)
-  const dest = path.join(dir, `${Date.now()}-${base}`)
-  fs.copyFileSync(src, dest)
-  return dest
-}
-
 function getStats(library) {
   const lib = library || loadLibrary()
   let phrases = 0
@@ -394,7 +410,6 @@ module.exports = {
   restoreBackup,
   mediaDir,
   stickersDir,
-  copyIntoMedia,
   getStats,
   libraryPath,
 }
