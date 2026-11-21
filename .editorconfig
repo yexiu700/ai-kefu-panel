@@ -1,0 +1,21 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.ps1]
+# Windows PowerShell 5.1 requires UTF-8 BOM to parse Chinese string literals reliably.
+charset = utf-8-bom
+
+[*.cmd]
+end_of_line = crlf
+
+[frontend/assets/*]
+# Prebuilt minified vendor/manager bundles must never be reformatted.
+trim_trailing_whitespace = false
+insert_final_newline = false

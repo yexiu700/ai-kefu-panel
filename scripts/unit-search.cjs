@@ -26,6 +26,7 @@ function createHarness() {
   const listEl = { innerHTML: '' }
   const sandbox = {
     SendRule: require('../frontend/panel/send-rule.js'),
+    PanelSearch: require('../frontend/panel/search.js'),
     crypto: { randomUUID: () => 'test-uuid' },
     S: {
       library: { groups: [] },

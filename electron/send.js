@@ -109,14 +109,6 @@ async function sendAttempt(text, opts) {
 module.exports = { sendText, sendPhrase, sleep }
 
 function failureMessage(r) {
-  const err = String(r.error || '').trim()
-  if (/elevation-mismatch/i.test(`${err} ${r.message || ''}`)) {
-    return '京东工作台以管理员运行，请右键以管理员身份运行 AI客服（elevation-mismatch）'
-  }
-  if (/activation failed/i.test(err)) {
-    return '没能切到聊天窗（Target activation failed），内容已复制；可点目标按钮重新「选择聊天窗…」'
-  }
-  if (err) return `${r.message || '发送失败，内容已保留在剪贴板，请手动粘贴'}（${err}）`
-  return r.message || '发送失败，内容已保留在剪贴板，请手动粘贴'
+  return require('../frontend/panel/send-errors').sendFailureMessage(r, '发送失败，内容已保留在剪贴板，请手动粘贴')
 }
 

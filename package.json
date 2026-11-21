@@ -19,8 +19,7 @@
   },
   "dependencies": {
     "koffi": "3.3.8",
-    "pinyin-pro": "^3.29.5",
-    "ws": "^8.22.1"
+    "pinyin-pro": "^3.29.5"
   },
   "build": {
     "appId": "com.arzopa.aikefu",

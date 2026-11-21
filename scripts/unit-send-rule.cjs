@@ -173,6 +173,7 @@ async function main() {
   const panelSandbox = {
     window: {
       SendRule: browser.window.SendRule,
+      PanelSearch: require('../frontend/panel/search.js'),
       addEventListener() {},
     },
     document: {

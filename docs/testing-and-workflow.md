@@ -70,7 +70,7 @@ node scripts/verify-send-package.cjs
 
 | 目标文件 | 单测脚本 | 依赖的起止锚点字符串 |
 | --- | --- | --- |
-| `frontend/panel/panel.js` | `scripts/unit-pinyin-lazy.cjs` | `'  let PY ='` → `'  function highlight('`，以及 `'  function warmPinyin()'` → `'  async function boot()'` |
+| `frontend/panel/panel.js` | `scripts/unit-pinyin-lazy.cjs` | `'  let PY ='` → `'  const highlight ='`，以及 `'  function warmPinyin()'` → `'  async function boot()'` |
 | `frontend/panel/panel.js` | `scripts/unit-search.cjs` | `'  const esc ='` → `'  let toastTimer ='`、`'  const hasTarget ='` → `'  function paintActive('`、`'  function bind()'` → `'  // ———————————————————— 启动 ————————————————————'` |
 | `frontend/panel/panel.js` | `scripts/unit-toasts.cjs` | `'  async function usePhrase('` → `'  async function saveLibrary('`；`'  async function aiUse('` → `'  // 收录：'`；`'  async function syncFeishu('` → `'  async function loadLibrary('`；`'  let toastTimer ='` → `'\n  }\n'`；`'function sendFailureMessage('` |
 | `frontend/panel/panel.js` | `scripts/unit-send-media.cjs` | `'  async function usePhrase('` → `'  async function saveLibrary('` |

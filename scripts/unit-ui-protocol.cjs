@@ -7,7 +7,7 @@ const { resolveUiPath, createUiHandler } = require('../electron/ui-protocol')
 const root = path.resolve('frontend')
 
 async function main() {
-  for (const asset of ['index.html', 'manager.html', 'panel/panel.js', 'panel/send-rule.js', 'panel/vendor/pinyin-pro.js',
+  for (const asset of ['index.html', 'manager.html', 'panel/panel.js', 'panel/send-rule.js', 'panel/search.js', 'panel/send-errors.js', 'panel/vendor/pinyin-pro.js',
     'brand-theme.css', 'assets/TemplatesPage-BlVodupk.js', 'assets/TemplatesPage-CYL9cg58.css']) {
     assert.equal(resolveUiPath(root, `aikefu://ui/${asset}?label=panel`), path.join(root, asset))
     assert.ok(fs.statSync(path.join(root, asset)).isFile(), asset)
@@ -25,7 +25,7 @@ async function main() {
   // Exercise the real handler with a file-fetch substitute: no Electron/userData needed.
   const handler = createUiHandler(root, async url => new Response(fs.readFileSync(fileURLToPath(url))))
   for (const [asset, mime] of [['index.html', 'text/html'], ['panel/panel.js', 'text/javascript'],
-    ['panel/send-rule.js', 'text/javascript'],
+    ['panel/send-rule.js', 'text/javascript'], ['panel/search.js', 'text/javascript'], ['panel/send-errors.js', 'text/javascript'],
     ['assets/TemplatesPage-BlVodupk.js', 'text/javascript'], ['brand-theme.css', 'text/css'],
     ['panel/default-company-library.json', 'application/json']]) {
     const response = await handler({ url: `aikefu://ui/${asset}?tab=templates`, method: 'GET' })
@@ -56,6 +56,20 @@ async function main() {
 
   const panel = fs.readFileSync('frontend/panel/panel.js', 'utf8')
   assert.ok(panel.includes('safeHexColor(g.color)'), 'panel.js must validate group color via safeHexColor before injecting inline style')
-  console.log('unit-ui-protocol: PASS (paths, traversal, CSP, media boundary, g.color check, assets, MIME, fetch, registration)')
+
+  // Hygiene guard: electron/*.js & frontend/panel/*.js must be LF without UTF-8 BOM; Chinese .ps1 scripts must keep UTF-8 BOM.
+  for (const dir of ['electron', 'frontend/panel']) {
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.endsWith('.js')) continue
+      const buf = fs.readFileSync(path.join(dir, name))
+      assert.equal(buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf, false, `${dir}/${name} must not have UTF-8 BOM`)
+      assert.equal(buf.includes(0x0d), false, `${dir}/${name} must use LF line endings`)
+    }
+  }
+  for (const psFile of ['electron/win32-daemon.ps1', 'scripts/unit-paste-wait.ps1']) {
+    const buf = fs.readFileSync(psFile)
+    assert.equal(buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf, true, `${psFile} must keep UTF-8 BOM for PowerShell 5.1`)
+  }
+  console.log('unit-ui-protocol: PASS (paths, traversal, CSP, media boundary, g.color check, hygiene, assets, MIME, fetch, registration)')
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })
