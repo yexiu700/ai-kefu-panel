@@ -30,6 +30,17 @@ function resolveUiPath(root, rawUrl) {
   return file
 }
 
+const UI_CSP = [
+  "default-src 'self' aikefu:",
+  "script-src 'self' aikefu:",
+  "style-src 'self' aikefu: 'unsafe-inline'",
+  "img-src 'self' aikefu: aikefu-media: data: blob:",
+  "font-src 'self' aikefu: data:",
+  "connect-src 'self' aikefu: aikefu-media: data: blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+].join('; ')
+
 function createUiHandler(root, fetchFile) {
   return async (request) => {
     let file
@@ -41,12 +52,15 @@ function createUiHandler(root, fetchFile) {
     try {
       if (!fs.statSync(file).isFile()) return new Response('not found', { status: 404 })
       const response = await fetchFile(pathToFileURL(file).href)
+      const ext = path.extname(file).toLowerCase()
+      const headers = {
+        'Content-Type': MIME[ext] || 'application/octet-stream',
+        'Cache-Control': 'no-cache',
+      }
+      if (ext === '.html') headers['Content-Security-Policy'] = UI_CSP
       return new Response(request.method === 'HEAD' ? null : response.body, {
         status: response.status,
-        headers: {
-          'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
-          'Cache-Control': 'no-cache',
-        },
+        headers,
       })
     } catch (error) {
       if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return new Response('not found', { status: 404 })

@@ -38,6 +38,7 @@
 
   // ———————————————————— 工具 ————————————————————
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+  const safeHexColor = (c) => { const s = String(c ?? '').trim(); return /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(s) ? s : '' }
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
   const scopeOf = (g) => (g.scope === 'private' ? 'private' : 'company')
   const tokensOf = (q) => q.trim().toLowerCase().split(/\s+/).filter(Boolean)
@@ -230,8 +231,8 @@
     const media = (p.images?.length || 0) + (p.files?.length || 0)
     const mode = hasTarget() ? defaultMode() : ''
     const tip = hasTarget() ? '' : ' title="未连接聊天窗：将复制到剪贴板"'
-    const tc = typeof p.titleColor === 'string' ? p.titleColor.trim() : ''
-    const tcStyle = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(tc) ? ` style="color:${tc}"` : ''
+    const tc = safeHexColor(p.titleColor)
+    const tcStyle = tc ? ` style="color:${tc}"` : ''
     const acts = !fq
       ? `<button data-act="fill" class="${mode === 'fill' ? 'primary' : ''}"${tip}>填入</button>` +
         `<button data-act="send" class="${mode === 'send' ? 'primary' : ''}"${tip}>发送</button>`
@@ -299,8 +300,9 @@
       for (const g of groups) {
         const phrases = g.phrases || []
         const collapsed = S.collapsed.has(g.id)
+        const gColor = safeHexColor(g.color)
         html += `<div class="ghead${collapsed ? ' collapsed' : ''}" data-g="${esc(g.id)}"><span class="chev">▾</span>` +
-          (g.color ? `<span class="gdot" style="background:${esc(g.color)}"></span>` : '') +
+          (gColor ? `<span class="gdot" style="background:${gColor}"></span>` : '') +
           `<span>${esc(g.name)}</span><span class="n">${phrases.length}</span></div>`
         if (!collapsed) for (const p of phrases) html += rowHtml(p, g, push(p, g), tokens, false)
       }

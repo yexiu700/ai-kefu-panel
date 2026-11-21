@@ -1,6 +1,7 @@
 'use strict'
 const fs = require('node:fs')
 const path = require('node:path')
+const { URL } = require('node:url')
 const { app, dialog, shell, clipboard, BrowserWindow, nativeImage } = require('electron')
 const store = require('./store')
 const media = require('./media')
@@ -72,6 +73,15 @@ function getPanelState() {
  */
 function asFailureList(v) {
   return Array.isArray(v) ? v : []
+}
+
+function assertSafeHttpUrl(raw) {
+  let parsed
+  try { parsed = new URL(String(raw || '')) } catch { throw new Error('无效的外部链接（仅支持 http/https 协议）') }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('不支持的链接协议（仅允许 http/https）')
+  }
+  return parsed.href
 }
 
 async function handleCommand(cmd, args = {}, ctx) {
@@ -199,7 +209,7 @@ async function handleCommand(cmd, args = {}, ctx) {
     case 'dismiss_announcement':
       return true
     case 'open_announcement_link':
-      if (args.url) await shell.openExternal(args.url)
+      if (args.url) await shell.openExternal(assertSafeHttpUrl(args.url))
       return true
 
     case 'capture_permission':
@@ -427,18 +437,9 @@ async function handleCommand(cmd, args = {}, ctx) {
     case 'get_file_bytes': {
       const name = args.name
       if (!name) return new Uint8Array()
-      // try media dir
-      const candidates = [
-        path.join(store.mediaDir(), name),
-        path.join(store.stickersDir(), name),
-        name,
-      ]
-      for (const p of candidates) {
-        if (fs.existsSync(p) && fs.statSync(p).isFile()) {
-          return fs.readFileSync(p)
-        }
-      }
-      return new Uint8Array()
+      const resolved = media.resolveMediaReadPath(name, { library: store.loadLibrary() })
+      if (!resolved) return new Uint8Array()
+      return fs.readFileSync(resolved)
     }
 
     case 'save_text_file': {
@@ -490,7 +491,7 @@ async function handleCommand(cmd, args = {}, ctx) {
     case 'usage_summary':
       return stub('usage_summary', { days: args.days || 7, items: [] })
     case 'open_pay_page':
-      if (args.url) await shell.openExternal(args.url)
+      if (args.url) await shell.openExternal(assertSafeHttpUrl(args.url))
       return true
 
     // —— assist / AI (stub; can later wire x.arzopa.com) ——
