@@ -1,4 +1,4 @@
-﻿'use strict'
+'use strict'
 const fs = require('node:fs')
 const path = require('node:path')
 const { randomUUID } = require('node:crypto')
@@ -20,11 +20,14 @@ function imageExtension(bytes) {
   if (bytes.toString('ascii',0,2) === 'BM') return '.bmp'
   invalid('图片格式不支持，请选择 PNG、JPEG、GIF、WebP 或 BMP 图片')
 }
+const MAX_FILE_BYTES = 50 * 1024 * 1024
+
 function saveBytes(input, { image = false, fileName = '' } = {}) {
   try {
     if (!(input instanceof Uint8Array) && !(input instanceof ArrayBuffer) && !Array.isArray(input)) invalid('未收到文件内容，请重新添加')
     const bytes = Buffer.from(input)
     if (!bytes.length) invalid('文件内容为空，无法添加')
+    if (bytes.length > MAX_FILE_BYTES) invalid('文件过大（超过 50 MB 上限），请压缩后重试')
     const ext = image ? imageExtension(bytes) : ''
     const original = path.win32.basename(String(fileName)).replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').slice(-180)
     if (!image && (!original || original === '.' || original === '..')) invalid('附件文件名无效，请重新选择')
@@ -38,6 +41,9 @@ function pickPaths(paths, image) {
   const result = { names: [], errors: [], fileNames: [] }
   for (const src of paths) {
     try {
+      const stat = fs.statSync(src)
+      if (!stat.isFile()) invalid('请选择文件，不能添加文件夹')
+      if (stat.size > MAX_FILE_BYTES) invalid('文件过大（超过 50 MB 上限），请压缩后重试')
       const name = saveBytes(fs.readFileSync(src), { image, fileName: path.basename(src) })
       result.names.push(name)
       result.fileNames.push(path.basename(src))
@@ -46,6 +52,56 @@ function pickPaths(paths, image) {
     }
   }
   return result
+}
+function collectRegisteredAbsolutePaths(library) {
+  const out = new Set()
+  if (!library || typeof library !== 'object') return out
+  const add = (item) => {
+    if (typeof item === 'string' && item && path.isAbsolute(item)) {
+      out.add(path.resolve(item).toLowerCase())
+    }
+  }
+  for (const g of library.groups || []) {
+    for (const p of g?.phrases || []) {
+      for (const img of p?.images || []) add(img)
+      for (const f of p?.files || []) add(f)
+    }
+  }
+  for (const st of library.stickers || []) {
+    if (typeof st === 'string') add(st)
+    else if (st && typeof st === 'object') { add(st.path); add(st.file); add(st.name) }
+  }
+  return out
+}
+function resolveInRoot(rootDir, name) {
+  try {
+    const root = fs.realpathSync(rootDir)
+    const file = fs.realpathSync(path.join(root, name))
+    if (path.dirname(file).toLowerCase() !== root.toLowerCase()) return null
+    if (!fs.statSync(file).isFile()) return null
+    return file
+  } catch {
+    return null
+  }
+}
+function resolveMediaReadPath(name, { library = null } = {}) {
+  if (typeof name !== 'string' || !name.trim()) return null
+  if (!path.isAbsolute(name)) {
+    if (path.basename(name) !== name || /[\\/:]/.test(name)) return null
+    return resolveInRoot(store.mediaDir(), name) || resolveInRoot(store.stickersDir(), name)
+  }
+  // Legacy absolute path support: only allow files inside local media/stickers dirs or registered in library.json.
+  const resolved = path.resolve(name)
+  const inLocal = resolveInRoot(store.mediaDir(), path.basename(resolved))
+  if (inLocal && inLocal.toLowerCase() === resolved.toLowerCase()) return inLocal
+  const inSticker = resolveInRoot(store.stickersDir(), path.basename(resolved))
+  if (inSticker && inSticker.toLowerCase() === resolved.toLowerCase()) return inSticker
+  const registered = collectRegisteredAbsolutePaths(library)
+  if (!registered.has(resolved.toLowerCase())) return null
+  try {
+    if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) return resolved
+  } catch { /* ignore */ }
+  return null
 }
 function preparePhraseMedia(phrase) {
   const paths = [], errors = []
@@ -70,4 +126,4 @@ function preparePhraseMedia(phrase) {
   }
   return { paths, errors }
 }
-module.exports = { saveBytes, pickPaths, preparePhraseMedia }
+module.exports = { MAX_FILE_BYTES, saveBytes, pickPaths, preparePhraseMedia, resolveMediaReadPath }

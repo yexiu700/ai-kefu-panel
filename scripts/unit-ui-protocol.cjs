@@ -38,14 +38,24 @@ async function main() {
   assert.equal((await handler({ url: 'aikefu://ui/..%5cpackage.json' })).status, 403)
   assert.equal((await handler({ url: 'aikefu://ui/index.html', method: 'POST' })).status, 405)
   assert.equal(await (await handler({ url: 'aikefu://ui/index.html', method: 'HEAD' })).text(), '')
+  const htmlResp = await handler({ url: 'aikefu://ui/index.html', method: 'GET' })
+  const csp = htmlResp.headers.get('content-security-policy') || ''
+  assert.match(csp, /script-src 'self' aikefu:/, 'HTML response must carry script-src CSP')
+  assert.match(csp, /img-src [^;]*aikefu-media:/, 'CSP must allow aikefu-media images')
+  assert.match(csp, /object-src 'none'/, 'CSP must disallow plugins/objects')
+
   const main = fs.readFileSync('electron/main.js', 'utf8')
   assert.ok(main.indexOf('registerSchemesAsPrivileged') < main.indexOf('app.whenReady()'))
   assert.ok(main.includes("scheme: 'aikefu-media'"))
+  assert.ok(main.includes('resolveMediaReadPath'), 'aikefu-media protocol must validate paths via media.resolveMediaReadPath')
   assert.ok(main.includes("protocol.handle('aikefu', createUiHandler(FRONTEND"))
   assert.ok(main.includes('aikefu://ui/${page}?label='))
   assert.ok(!main.includes('startStaticServer'))
   assert.ok(main.includes("app.requestSingleInstanceLock()"))
   assert.ok(main.includes("'ai-kefu-panel'"))
-  console.log('unit-ui-protocol: PASS (paths, traversal, assets, MIME, fetch, registration)')
+
+  const panel = fs.readFileSync('frontend/panel/panel.js', 'utf8')
+  assert.ok(panel.includes('safeHexColor(g.color)'), 'panel.js must validate group color via safeHexColor before injecting inline style')
+  console.log('unit-ui-protocol: PASS (paths, traversal, CSP, media boundary, g.color check, assets, MIME, fetch, registration)')
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })

@@ -6,6 +6,7 @@ const {
   app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, nativeImage, protocol, net,
 } = require('electron')
 const store = require('./store')
+const media = require('./media')
 const { handleCommand, runtime, emitAll, getPanelState, setTarget, triggerPhraseHotkey } = require('./handlers')
 const win32 = require('./win32')
 const { startSnapLoop } = require('./snap')
@@ -296,18 +297,14 @@ function registerMediaProtocol() {
   protocol.handle('aikefu-media', async (request) => {
     try {
       const u = new URL(request.url)
-      let p = u.searchParams.get('p')
-      if (!p) return new Response('not found', { status: 404 })
-      // 话术保存媒体文件名；同时兼容已有数据中的绝对路径。
-      if (!path.isAbsolute(p)) {
-        if (p !== path.basename(p)) return new Response('not found', { status: 404 })
-        p = [path.join(store.mediaDir(), p), path.join(store.stickersDir(), p)]
-          .find((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile())
-      }
-      if (!p || !fs.existsSync(p) || !fs.statSync(p).isFile()) return new Response('not found', { status: 404 })
-      return net.fetch(pathToFileURL(p).href)
+      const raw = u.searchParams.get('p')
+      if (!raw) return new Response('not found', { status: 404 })
+      const resolved = media.resolveMediaReadPath(raw, { library: store.loadLibrary() })
+      if (!resolved) return new Response('not found', { status: 404 })
+      return net.fetch(pathToFileURL(resolved).href)
     } catch (e) {
-      return new Response(String(e), { status: 500 })
+      console.warn('[media protocol]', e)
+      return new Response('media unavailable', { status: 500 })
     }
   })
 }
