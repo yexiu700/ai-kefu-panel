@@ -190,12 +190,13 @@
 
   function groupsInScope(scope) {
     const groups = (S.library.groups || []).filter((g) => scopeOf(g) === scope)
-    // 分组若限定了适用软件，且与当前窗口匹配，则排到最前
-    const exe = String(S.target?.exe || '').toLowerCase().replace(/\.exe$/, '')
+    // 分组若限定了适用软件，且与当前窗口精确匹配，则排到最前
+    const norm = window.SendRule?.normalizeExeName || ((v) => String(v || '').trim().split(/[\\/]/).pop().toLowerCase().replace(/\.exe$/, ''))
+    const exe = norm(S.target?.exe)
     if (!exe) return groups
     const hit = (g) => (g.apps || []).some((a) => {
-      const n = String(a?.exe ?? a?.name ?? a ?? '').toLowerCase().replace(/\.exe$/, '')
-      return n && (n === exe || exe.includes(n))
+      const n = norm(a?.exe ?? a?.name ?? a ?? '')
+      return Boolean(n) && n === exe
     })
     return [...groups.filter(hit), ...groups.filter((g) => !hit(g))]
   }
