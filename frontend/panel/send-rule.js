@@ -6,7 +6,8 @@ const SEND_MODES = new Set(['send', 'fill', 'copy'])
 const SEND_KEYS = new Set(['enter', 'ctrl_enter', 'alt_s'])
 
 function normalizeExeName(exe) {
-  const value = String(exe ?? '').trim().toLowerCase()
+  const base = String(exe ?? '').trim().split(/[\\/]/).pop() || ''
+  const value = base.toLowerCase()
   return value.endsWith('.exe') ? value.slice(0, -4) : value
 }
 

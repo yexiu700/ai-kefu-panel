@@ -3,7 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const {
-  app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, nativeImage, protocol, net,
+  app, BrowserWindow, ipcMain, globalShortcut, Tray, Menu, nativeImage, protocol, net, screen,
 } = require('electron')
 const store = require('./store')
 const media = require('./media')
@@ -356,17 +356,25 @@ if (!gotLock) {
         getPanelWindow: () => panelWindow,
         getRuntime: () => runtime,
         setTarget: (t, opts) => {
-          const prev = runtime.target
-          runtime.target = t
-          if (typeof t?.bound === 'boolean') runtime.pinned = !!t.bound
-          if (opts?.emit) emitAll('target-changed', runtime.target)
-          else if (opts?.emit === false) { /* silent rect refresh */ }
-          else if (!prev || prev.hwnd !== t?.hwnd || prev.title !== t?.title || prev.bound !== t?.bound) {
-            emitAll('target-changed', runtime.target)
-          }
-          hotkeyManager.syncForTargetExe(runtime.target?.exe || null)
+          setTarget(t, {
+            ...opts,
+            onTargetExeChanged: (exe) => hotkeyManager.syncForTargetExe(exe),
+          })
         },
         emitTarget: (t) => emitAll('target-changed', t),
+        getWorkArea: (rect) => {
+          try {
+            const display = screen.getDisplayMatching({
+              x: Math.round(rect.left),
+              y: Math.round(rect.top),
+              width: Math.max(1, Math.round(rect.width)),
+              height: Math.max(1, Math.round(rect.height)),
+            })
+            return display?.workArea || null
+          } catch {
+            return null
+          }
+        },
       })
       console.log('[shell] snap/follow loop started')
     }

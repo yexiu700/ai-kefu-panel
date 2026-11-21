@@ -29,8 +29,13 @@ async function main() {
   const win32 = { isWin: () => true,
     getForeground: async () => { foregroundCalls++; return info },
     getWindowRect: async () => { rectCalls++; return info } }
-  const mocks = { './store': { loadSettings: () => settings }, './win32': win32, './snap-policy': { pollPolicy } }
-  const context = { module: { exports: {} }, require: id => mocks[id], console, Date: { now: () => now },
+  const mocks = {
+    './store': { loadSettings: () => settings },
+    './win32': win32,
+    './snap-policy': { pollPolicy },
+    '../frontend/panel/send-rule': require('../frontend/panel/send-rule'),
+  }
+  const context = { module: { exports: {} }, require: id => mocks[id], console, process: { pid: 99999 }, Date: { now: () => now },
     setInterval: fn => { tick = fn; return 1 }, setTimeout: () => 2, clearInterval() {}, clearTimeout() {} }
   const filename = path.resolve('electron/snap.js')
   vm.runInNewContext(fs.readFileSync(filename, 'utf8'), context, { filename })
@@ -67,7 +72,7 @@ async function main() {
   stop()
 
   // Exact process-stem matching (ROADMAP #5): preserve real chat apps, reject substring false positives
-  const { matchesChatApp } = context.module.exports
+  const { matchesChatApp, computeSnap, isOurWindow, isUsableWindowRect } = context.module.exports
   const storeCtx = {
     module: { exports: {} },
     require: (id) => (id === 'electron' ? { app: { getPath: () => '/tmp' } } : require(id)),
@@ -123,6 +128,52 @@ async function main() {
     assert.equal(matchesChatApp(nonChatExe, winChatApps), false, `must NOT false-match substring process: ${nonChatExe}`)
   }
 
+  // Minimized / iconic windows and (-32000, -32000) offscreen rects must NOT pull the panel off-screen
+  assert.equal(isUsableWindowRect({ visible: true, iconic: true, left: 100, top: 100, width: 400, height: 600 }), false)
+  assert.equal(isUsableWindowRect({ visible: true, iconic: false, left: -32000, top: -32000, width: 160, height: 28 }), false)
+  assert.equal(isUsableWindowRect({ visible: true, iconic: false, left: 100, top: 100, width: 400, height: 600 }), true)
+
+  // computeSnap clamps panel inside display workArea when chat window touches edge or is maximized
+  const workArea = { x: 0, y: 0, width: 1920, height: 1040 }
+  const rightEdgeSnap = computeSnap({ left: 0, top: 0, right: 1920, bottom: 1040, width: 1920, height: 1040 }, 300, 800, 'right', 0, workArea)
+  assert.equal(rightEdgeSnap.x, 1620, 'right-docked panel on maximized window must stay inside workArea')
+  assert.ok(rightEdgeSnap.y >= 0 && rightEdgeSnap.y + 800 <= 1040)
+  const leftEdgeSnap = computeSnap({ left: 50, top: 0, right: 1200, bottom: 900, width: 1150, height: 900 }, 300, 800, 'left', 0, workArea)
+  assert.equal(leftEdgeSnap.x, 0, 'left-docked panel near left edge must clamp to workArea.x')
+
+  // isOurWindow uses pid first so browser tabs mentioning "AI客服" are NOT skipped
+  assert.equal(isOurWindow({ pid: 99999, title: '任意标题' }, 99999), true, 'same pid must be recognized as our window')
+  assert.equal(isOurWindow({ pid: 12345, title: 'AI客服 - GitHub - Google Chrome' }, 99999), false, 'other process containing AI客服 in title must not be skipped')
+  assert.equal(isOurWindow({ title: 'AI客服' }, 99999), true, 'title fallback still works when pid is absent')
+
+  // Minimized pinned target must NOT call panel.setPosition with (-32000, -32000)
+  const movedCoords = []
+  const trackedPanel = {
+    isDestroyed: () => false,
+    isVisible: () => true,
+    getSize: () => [300, 800],
+    setPosition: (x, y) => { movedCoords.push({ x, y }) },
+  }
+  runtime.pinned = true
+  runtime.panelVisible = true
+  runtime.target = { hwnd: 55, exe: 'wechat.exe', title: '微信', bound: true, rect: { left: 100, top: 100, right: 500, bottom: 900, width: 400, height: 800 } }
+  settings.panel.docked = true
+  info.iconic = true
+  info.left = -32000
+  info.top = -32000
+  const stopMin = context.module.exports.startSnapLoop({
+    getRuntime: () => runtime,
+    getPanelWindow: () => trackedPanel,
+    setTarget: (target) => { runtime.target = target },
+    getWorkArea: () => workArea,
+  })
+  await tick()
+  assert.equal(movedCoords.length, 0, 'minimized/iconic target must not move panel off-screen')
+  stopMin()
+  info.iconic = false
+  info.left = 10
+  info.top = 20
+
   // Verify snap loop ignores substring false-positive foreground window (qqbrowser.exe) and binds real target (紫鸟浏览器.exe)
   runtime.target = null
   runtime.pinned = false
@@ -132,6 +183,7 @@ async function main() {
   settings.panel.autoBind = true
   settings.panel.chatApps = ['qq.exe', '紫鸟浏览器']
   info.exe = 'qqbrowser.exe'
+  info.pid = 45678
   now = 6000
   const stop2 = context.module.exports.startSnapLoop({
     getRuntime: () => runtime,
@@ -146,6 +198,36 @@ async function main() {
   assert.equal(runtime.target?.exe, '紫鸟浏览器.exe', '紫鸟浏览器.exe must auto-bind to 紫鸟浏览器')
   stop2()
 
-  console.log('unit-snap-policy: PASS (policy + exact exe matching + mocked loop; no real windows moved)')
+  // panel.js groupsInScope must also use exact exe matching (no exe.includes(n))
+  const panelSrc = fs.readFileSync(path.resolve('frontend/panel/panel.js'), 'utf8')
+  const gStart = panelSrc.indexOf('  function groupsInScope(')
+  const gEnd = panelSrc.indexOf('  function frequent(', gStart)
+  const panelCtx = {
+    window: { SendRule: require('../frontend/panel/send-rule') },
+    scopeOf: (g) => (g.scope === 'private' ? 'private' : 'company'),
+    S: {
+      target: { exe: 'QQBrowser.exe' },
+      library: {
+        groups: [
+          { id: 'g1', name: '默认组', scope: 'company', apps: [] },
+          { id: 'g2', name: 'QQ专属', scope: 'company', apps: ['qq.exe'] },
+        ],
+      },
+    },
+  }
+  vm.runInNewContext(panelSrc.slice(gStart, gEnd) + ';globalThis.groupsInScope=groupsInScope', panelCtx)
+  assert.deepEqual(
+    Array.from(panelCtx.groupsInScope('company'), (g) => g.id),
+    ['g1', 'g2'],
+    'QQBrowser.exe must not promote qq.exe-scoped group in panel.js',
+  )
+  panelCtx.S.target = { exe: 'QQ.exe' }
+  assert.deepEqual(
+    Array.from(panelCtx.groupsInScope('company'), (g) => g.id),
+    ['g2', 'g1'],
+    'QQ.exe must promote qq.exe-scoped group in panel.js',
+  )
+
+  console.log('unit-snap-policy: PASS (policy, iconic guard, workArea clamp, pid check, unified exact exe matching)')
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })

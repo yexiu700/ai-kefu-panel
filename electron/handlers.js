@@ -25,9 +25,17 @@ const runtime = {
 }
 
 function setTarget(next, opts = {}) {
-  const prevExe = normalizeExeName(runtime.target?.exe)
+  const prev = runtime.target
+  const prevExe = normalizeExeName(prev?.exe)
   runtime.target = next
-  if (opts.emit) emitAll('target-changed', runtime.target)
+  if (typeof next?.bound === 'boolean') runtime.pinned = !!next.bound
+  if (opts.emit === true) {
+    emitAll('target-changed', runtime.target)
+  } else if (opts.emit === false) {
+    /* silent rect refresh */
+  } else if (!prev || prev.hwnd !== next?.hwnd || prev.title !== next?.title || prev.bound !== next?.bound) {
+    emitAll('target-changed', runtime.target)
+  }
   const nextExe = normalizeExeName(runtime.target?.exe)
   if (prevExe !== nextExe) opts.onTargetExeChanged?.(runtime.target?.exe || null)
 }
